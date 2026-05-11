@@ -29,6 +29,8 @@
 | 语言 | **Kotlin 2.2.10** | 全部业务代码 |
 | 构建系统 | Gradle (Kotlin DSL) | `libs.versions.toml` 管理依赖 |
 | Compose BOM | `2026.02.01` | 稳定版本 |
+| 依赖注入 | **Hilt 2.59.2** + **KSP 2.3.0** | AGP 9 必须使用 Hilt ≥2.59 + KSP2 |
+| 注解处理 | **KSP** (Kotlin Symbol Processing) | KAPT 与 AGP 9 built-in Kotlin 不兼容 |
 
 ### 2.2 Material You 约束与配色策略
 
@@ -40,7 +42,72 @@
 - **主题切换**: 用户在「设置」中可在三套方案间切换；跟随系统明暗仅对「系统动态色」生效，其余两套为固定明暗。
 - **语义化颜色**: 严格使用 Material 3 Token 体系（`primary`, `onPrimary`, `surface`, `onSurface`, `inverseSurface` 等），禁止在 UI 控件中硬编码色值。
 
-### 2.3 图形与动画
+### 2.3 Hilt + KSP + AGP 9 兼容方案（已验证）
+
+> ⚠️ 这是 Calcore 项目的**关键兼容性记录**，后续任何涉及 Hilt/KSP/AGP 的升级都必须先参考本节。
+
+#### 问题背景
+- AGP 9.x 引入 **built-in Kotlin**（默认启用），导致 `kotlin-android` 插件不再需要。
+- **KAPT** 插件明确报错：`"not compatible with built-in Kotlin support"`。
+- **KSP1** 明确不兼容 AGP 9+（Google/ksp#2615）。
+- **Hilt 2.56** 的 Gradle 插件在 AGP 9 下报错：`"Android BaseExtension not found"`（google/dagger#4944）。
+
+#### 最终方案（已验证 BUILD SUCCESSFUL）
+
+| 组件 | 版本 | 备注 |
+|---|---|---|
+| AGP | 9.2.1 | 保持 |
+| Kotlin | 2.2.10 | 保持 |
+| Hilt | **2.59.2** | 首个正式支持 AGP 9 的版本 |
+| KSP | **2.3.0** | KSP2，独立版本号，不再绑定 Kotlin 版本 |
+| 注解处理 | `ksp()` | 替代 `kapt()` |
+
+#### Gradle 配置
+
+```kotlin
+// gradle.properties
+android.builtInKotlin=false
+android.newDsl=false
+```
+
+```kotlin
+// app/build.gradle.kts
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)   // 必须显式应用
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.hilt.android)
+    alias(libs.plugins.ksp)
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_11)
+    }
+}
+
+dependencies {
+    implementation(libs.hilt.android)
+    implementation(libs.hilt.navigation.compose)
+    ksp(libs.hilt.compiler)
+}
+```
+
+> **注意**: `android.builtInKotlin=false` 和 `android.newDsl=false` 是**临时回退方案**，AGP 10.0 将移除。届时需升级到 KSP/Hilt 的最新适配版本。
+
+#### Kotlin 2.2 注解目标变更
+
+构造函数参数注入需使用 `@param:` 目标：
+
+```kotlin
+class ThemeDataStore @Inject constructor(
+    @param:ApplicationContext private val context: Context
+)
+```
+
+---
+
+### 2.4 图形与动画
 
 | 场景 | 技术方案 | 理由 |
 |---|---|---|
@@ -143,6 +210,8 @@ com.cloveriris.calcore
 |---|---|---|---|---|
 | 2026-05-12 | minSdk=31 | Material You 需要 API 31 | 降至 29，放弃 Dynamic Color | 锁定 31 |
 | 2026-05-12 | 三套配色方案 | 系统动态色 + 终端绿 + 浅蓝白 | 仅单套品牌色 | 采用三套 |
+| 2026-05-12 | Hilt 2.59.2 + KSP 2.3.0 | AGP 9.2.1 与 Hilt 2.56/kapt 不兼容 | 降级 AGP 8.x 或手动 DI | Hilt 2.59.2 + KSP 2.3.0 |
+| 2026-05-12 | AGP 9 built-in Kotlin 回退 | KSP/KAPT 均不兼容 AGP 9 built-in Kotlin | 长期方案等 KSP 官方适配 | `android.builtInKotlin=false` + `android.newDsl=false` 临时回退 |
 | 2026-05-12 | Jetpack Compose | 声明式 UI，Material 3 一等支持 | XML + View | 采用 Compose |
 | 2026-05-12 | OpenGL ES 3.2 | 3D 图形 60 FPS 必需 | Vulkan / AGSL only | GLES 为主，AGSL 增强 |
 | 2026-05-12 | MVI 单向流 | 计算器状态复杂，需可预测 | MVVM 双向绑定 | MVI |
