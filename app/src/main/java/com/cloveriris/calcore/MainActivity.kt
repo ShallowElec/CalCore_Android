@@ -5,24 +5,44 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.cloveriris.calcore.ui.theme.CalcoreAndroidTheme
+import androidx.navigation.compose.rememberNavController
+import com.cloveriris.calcore.data.local.ThemeDataStore
+import com.cloveriris.calcore.navigation.CalcoreNavHost
+import com.cloveriris.calcore.ui.theme.AppTheme
+import com.cloveriris.calcore.ui.theme.CalcoreTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var themeDataStore: ThemeDataStore
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        themeDataStore = ThemeDataStore(this)
         enableEdgeToEdge()
         setContent {
-            CalcoreAndroidTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
+            val appTheme by themeDataStore.appTheme.collectAsState(initial = AppTheme.SYSTEM_DYNAMIC)
+            val scope = rememberCoroutineScope()
+
+            CalcoreTheme(appTheme = appTheme) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    CalcoreApp(
+                        currentTheme = appTheme,
+                        onThemeChange = { theme ->
+                            scope.launch {
+                                themeDataStore.setAppTheme(theme)
+                            }
+                        }
                     )
                 }
             }
@@ -31,17 +51,14 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
+fun CalcoreApp(
+    currentTheme: AppTheme = AppTheme.SYSTEM_DYNAMIC,
+    onThemeChange: (AppTheme) -> Unit = {}
+) {
+    val navController = rememberNavController()
+    CalcoreNavHost(
+        navController = navController,
+        currentTheme = currentTheme,
+        onThemeChange = onThemeChange
     )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    CalcoreAndroidTheme {
-        Greeting("Android")
-    }
 }
