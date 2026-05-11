@@ -6,6 +6,7 @@ import com.cloveriris.calcore.domain.model.CalculatorInput
 import com.cloveriris.calcore.domain.model.CalculatorMode
 import com.cloveriris.calcore.domain.model.CalculatorState
 import com.cloveriris.calcore.domain.model.MemoryState
+import com.cloveriris.calcore.domain.usecase.EvaluateUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +18,9 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 @HiltViewModel
-class CalculatorViewModel @Inject constructor() : ViewModel() {
+class CalculatorViewModel @Inject constructor(
+    private val evaluateUseCase: EvaluateUseCase
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CalculatorUiState())
     val uiState: StateFlow<CalculatorUiState> = _uiState.asStateFlow()
@@ -81,7 +84,7 @@ class CalculatorViewModel @Inject constructor() : ViewModel() {
                 }
                 is CalculatorState.Inputting -> {
                     val expr = state.displayExpression
-                    val newExpr = if (expr.last().isOperator()) {
+                    val newExpr = if (expr.isNotEmpty() && expr.last().isOperator()) {
                         expr.dropLast(1) + op
                     } else {
                         expr + op
@@ -129,11 +132,15 @@ class CalculatorViewModel @Inject constructor() : ViewModel() {
         _uiState.update { current ->
             when (val state = current.state) {
                 is CalculatorState.Inputting -> {
-                    val result = evaluateExpression(state.displayExpression)
+                    val result = evaluateUseCase.evaluate(state.displayExpression)
+                    val resultStr = result.fold(
+                        onSuccess = ::formatResult,
+                        onFailure = { "Error" }
+                    )
                     current.copy(
                         state = CalculatorState.Evaluated(
                             displayExpression = state.displayExpression,
-                            displayResult = formatResult(result)
+                            displayResult = resultStr
                         )
                     )
                 }
@@ -180,12 +187,15 @@ class CalculatorViewModel @Inject constructor() : ViewModel() {
         _uiState.update { current ->
             when (val state = current.state) {
                 is CalculatorState.Inputting -> {
-                    val value = state.displayExpression.toDoubleOrNull() ?: 0.0
-                    val result = value / 100.0
+                    val result = evaluateUseCase.evaluate("${state.displayExpression} / 100")
+                    val resultStr = result.fold(
+                        onSuccess = ::formatResult,
+                        onFailure = { "Error" }
+                    )
                     current.copy(
                         state = CalculatorState.Evaluated(
                             displayExpression = state.displayExpression,
-                            displayResult = formatResult(result)
+                            displayResult = resultStr
                         )
                     )
                 }
@@ -196,12 +206,16 @@ class CalculatorViewModel @Inject constructor() : ViewModel() {
 
     private fun onReciprocal() {
         _uiState.update { current ->
-            val value = getCurrentNumericValue(current.state)
-            val result = if (value != 0.0) 1.0 / value else Double.NaN
+            val expr = getCurrentExpression(current.state)
+            val result = evaluateUseCase.evaluate("1 / ($expr)")
+            val resultStr = result.fold(
+                onSuccess = ::formatResult,
+                onFailure = { "Error" }
+            )
             current.copy(
                 state = CalculatorState.Evaluated(
-                    displayExpression = "1/(${getDisplayExpression(current.state)})",
-                    displayResult = formatResult(result)
+                    displayExpression = "1/($expr)",
+                    displayResult = resultStr
                 )
             )
         }
@@ -209,12 +223,16 @@ class CalculatorViewModel @Inject constructor() : ViewModel() {
 
     private fun onSquare() {
         _uiState.update { current ->
-            val value = getCurrentNumericValue(current.state)
-            val result = value.pow(2)
+            val expr = getCurrentExpression(current.state)
+            val result = evaluateUseCase.evaluate("($expr) ^ 2")
+            val resultStr = result.fold(
+                onSuccess = ::formatResult,
+                onFailure = { "Error" }
+            )
             current.copy(
                 state = CalculatorState.Evaluated(
-                    displayExpression = "sqr(${getDisplayExpression(current.state)})",
-                    displayResult = formatResult(result)
+                    displayExpression = "sqr($expr)",
+                    displayResult = resultStr
                 )
             )
         }
@@ -222,12 +240,16 @@ class CalculatorViewModel @Inject constructor() : ViewModel() {
 
     private fun onSquareRoot() {
         _uiState.update { current ->
-            val value = getCurrentNumericValue(current.state)
-            val result = sqrt(value)
+            val expr = getCurrentExpression(current.state)
+            val result = evaluateUseCase.evaluate("sqrt($expr)")
+            val resultStr = result.fold(
+                onSuccess = ::formatResult,
+                onFailure = { "Error" }
+            )
             current.copy(
                 state = CalculatorState.Evaluated(
-                    displayExpression = "√(${getDisplayExpression(current.state)})",
-                    displayResult = formatResult(result)
+                    displayExpression = "√($expr)",
+                    displayResult = resultStr
                 )
             )
         }
@@ -238,14 +260,26 @@ class CalculatorViewModel @Inject constructor() : ViewModel() {
             when (val state = current.state) {
                 is CalculatorState.Inputting -> {
                     val expr = state.displayExpression
-                    val newExpr = if (expr.startsWith("-")) expr.drop(1) else "-$expr"
-                    current.copy(state = state.copy(displayExpression = newExpr))
-                }
-                is CalculatorState.Evaluated -> {
-                    val value = state.displayResult.toDoubleOrNull() ?: 0.0
+                    val result = evaluateUseCase.evaluate("-($expr)")
+                    val resultStr = result.fold(
+                        onSuccess = ::formatResult,
+                        onFailure = { "Error" }
+                    )
                     current.copy(
                         state = CalculatorState.Inputting(
-                            displayExpression = formatResult(-value)
+                            displayExpression = resultStr
+                        )
+                    )
+                }
+                is CalculatorState.Evaluated -> {
+                    val result = evaluateUseCase.evaluate("-(${state.displayResult})")
+                    val resultStr = result.fold(
+                        onSuccess = ::formatResult,
+                        onFailure = { "Error" }
+                    )
+                    current.copy(
+                        state = CalculatorState.Inputting(
+                            displayExpression = resultStr
                         )
                     )
                 }
@@ -274,14 +308,14 @@ class CalculatorViewModel @Inject constructor() : ViewModel() {
 
     private fun onMemoryStore() {
         _uiState.update { current ->
-            val value = getCurrentNumericValue(current.state)
+            val value = getCurrentValue(current.state)
             current.copy(memory = MemoryState(value = value, hasValue = true))
         }
     }
 
     private fun onMemoryAdd() {
         _uiState.update { current ->
-            val value = getCurrentNumericValue(current.state)
+            val value = getCurrentValue(current.state)
             val newValue = if (current.memory.hasValue) current.memory.value + value else value
             current.copy(memory = MemoryState(value = newValue, hasValue = true))
         }
@@ -289,21 +323,13 @@ class CalculatorViewModel @Inject constructor() : ViewModel() {
 
     private fun onMemorySubtract() {
         _uiState.update { current ->
-            val value = getCurrentNumericValue(current.state)
+            val value = getCurrentValue(current.state)
             val newValue = if (current.memory.hasValue) current.memory.value - value else -value
             current.copy(memory = MemoryState(value = newValue, hasValue = true))
         }
     }
 
-    private fun getCurrentNumericValue(state: CalculatorState): Double {
-        return when (state) {
-            is CalculatorState.Idle -> 0.0
-            is CalculatorState.Inputting -> state.displayExpression.toDoubleOrNull() ?: 0.0
-            is CalculatorState.Evaluated -> state.displayResult.toDoubleOrNull() ?: 0.0
-        }
-    }
-
-    private fun getDisplayExpression(state: CalculatorState): String {
+    private fun getCurrentExpression(state: CalculatorState): String {
         return when (state) {
             is CalculatorState.Idle -> "0"
             is CalculatorState.Inputting -> state.displayExpression
@@ -311,80 +337,17 @@ class CalculatorViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    private fun evaluateExpression(expression: String): Double {
-        return try {
-            val sanitized = expression
-                .replace("×", "*")
-                .replace("÷", "/")
-            evaluateSimpleExpression(sanitized)
-        } catch (e: Exception) {
-            Double.NaN
-        }
-    }
-
-    private fun evaluateSimpleExpression(expr: String): Double {
-        // Simple recursive descent parser for basic arithmetic
-        val tokens = tokenize(expr)
-        var index = 0
-
-        fun parseFactor(): Double {
-            val token = tokens[index++]
-            return token.toDoubleOrNull() ?: 0.0
-        }
-
-        fun parseTerm(): Double {
-            var value = parseFactor()
-            while (index < tokens.size && (tokens[index] == "*" || tokens[index] == "/")) {
-                val op = tokens[index++]
-                val right = parseFactor()
-                value = if (op == "*") value * right else value / right
+    private fun getCurrentValue(state: CalculatorState): Double {
+        return when (state) {
+            is CalculatorState.Idle -> 0.0
+            is CalculatorState.Inputting -> {
+                evaluateUseCase.evaluate(state.displayExpression)
+                    .getOrNull() ?: 0.0
             }
-            return value
-        }
-
-        fun parseExpression(): Double {
-            var value = parseTerm()
-            while (index < tokens.size && (tokens[index] == "+" || tokens[index] == "-")) {
-                val op = tokens[index++]
-                val right = parseTerm()
-                value = if (op == "+") value + right else value - right
+            is CalculatorState.Evaluated -> {
+                state.displayResult.toDoubleOrNull() ?: 0.0
             }
-            return value
         }
-
-        return parseExpression()
-    }
-
-    private fun tokenize(expr: String): List<String> {
-        val tokens = mutableListOf<String>()
-        var current = ""
-        var i = 0
-        while (i < expr.length) {
-            val ch = expr[i]
-            when {
-                ch.isDigit() || ch == '.' -> {
-                    current += ch
-                }
-                ch == '+' || ch == '-' || ch == '*' || ch == '/' -> {
-                    if (current.isNotEmpty()) {
-                        tokens.add(current)
-                        current = ""
-                    }
-                    // Handle negative numbers
-                    if (ch == '-' && (i == 0 || expr[i - 1] in "+*/")) {
-                        current += ch
-                    } else {
-                        tokens.add(ch.toString())
-                    }
-                }
-                else -> {}
-            }
-            i++
-        }
-        if (current.isNotEmpty()) {
-            tokens.add(current)
-        }
-        return tokens
     }
 
     private fun formatResult(value: Double): String {
