@@ -118,6 +118,9 @@ fun CalculatorScreen(
                     onToggleVisPanel = { visualizationViewModel.setPanelExpanded(!visState.isPanelExpanded) },
                     onBaseChange = viewModel::onBaseChange,
                     onBitWidthChange = viewModel::onBitWidthChange,
+                    onVisPlayPause = visualizationViewModel::playPauseEvaluation,
+                    onVisScrub = visualizationViewModel::setEvaluationProgress,
+                    onVisRestart = visualizationViewModel::restartEvaluation,
                     modifier = Modifier.padding(innerPadding)
                 )
             } else {
@@ -132,6 +135,9 @@ fun CalculatorScreen(
                     onToggleVisPanel = { visualizationViewModel.setPanelExpanded(!visState.isPanelExpanded) },
                     onBaseChange = viewModel::onBaseChange,
                     onBitWidthChange = viewModel::onBitWidthChange,
+                    onVisPlayPause = visualizationViewModel::playPauseEvaluation,
+                    onVisScrub = visualizationViewModel::setEvaluationProgress,
+                    onVisRestart = visualizationViewModel::restartEvaluation,
                     modifier = Modifier.padding(innerPadding)
                 )
             }
@@ -153,6 +159,9 @@ private fun PortraitLayout(
     onToggleVisPanel: () -> Unit,
     onBaseChange: (NumberBase) -> Unit,
     onBitWidthChange: (com.cloveriris.calcore.domain.model.BitWidth) -> Unit,
+    onVisPlayPause: () -> Unit = {},
+    onVisScrub: (Float) -> Unit = {},
+    onVisRestart: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -170,7 +179,10 @@ private fun PortraitLayout(
             CollapsibleVisualizationPanel(
                 state = visState,
                 isExpanded = visState.isPanelExpanded,
-                onToggleExpand = onToggleVisPanel
+                onToggleExpand = onToggleVisPanel,
+                onPlayPause = onVisPlayPause,
+                onScrub = onVisScrub,
+                onRestart = onVisRestart
             )
         }
 
@@ -284,6 +296,9 @@ private fun LandscapeLayout(
     onToggleVisPanel: () -> Unit,
     onBaseChange: (NumberBase) -> Unit,
     onBitWidthChange: (com.cloveriris.calcore.domain.model.BitWidth) -> Unit,
+    onVisPlayPause: () -> Unit = {},
+    onVisScrub: (Float) -> Unit = {},
+    onVisRestart: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var isRightExpanded by remember { mutableStateOf(false) }
@@ -428,7 +443,10 @@ private fun LandscapeLayout(
                         state = visState,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
+                            .weight(1f),
+                        onPlayPause = onVisPlayPause,
+                        onScrub = onVisScrub,
+                        onRestart = onVisRestart
                     )
 
                     // 底部控制条

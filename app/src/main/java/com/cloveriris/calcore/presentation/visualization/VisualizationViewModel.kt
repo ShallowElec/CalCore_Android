@@ -6,6 +6,8 @@ import com.cloveriris.calcore.domain.model.AnimationEvent
 import com.cloveriris.calcore.domain.model.Architecture
 import com.cloveriris.calcore.domain.model.MemoryOpType
 import com.cloveriris.calcore.domain.model.VisualizationLevel
+import com.cloveriris.calcore.domain.usecase.EvaluateUseCase
+import com.cloveriris.calcore.engine.parser.Expression
 import com.cloveriris.calcore.ui.visualization.MemoryCellVisual
 import com.cloveriris.calcore.ui.visualization.RegisterVisual
 import com.cloveriris.calcore.ui.visualization.StackFrameVisual
@@ -23,7 +25,9 @@ import javax.inject.Inject
  * 接收 AnimationEvent，生成对应的视觉状态，驱动 Canvas 组件。
  */
 @HiltViewModel
-class VisualizationViewModel @Inject constructor() : ViewModel() {
+class VisualizationViewModel @Inject constructor(
+    private val evaluateUseCase: EvaluateUseCase
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VisualizationUiState())
     val uiState: StateFlow<VisualizationUiState> = _uiState.asStateFlow()
@@ -37,6 +41,37 @@ class VisualizationViewModel @Inject constructor() : ViewModel() {
             AnimationEvent.Backspace -> handleBackspace()
             is AnimationEvent.MemoryOperation -> handleMemory(event.type)
             AnimationEvent.DecimalEntered -> handleDecimal()
+            is AnimationEvent.ExpressionParsed -> handleExpressionParsed(event.expression)
+            is AnimationEvent.BitOperation -> handleBitOperation(event)
+        }
+    }
+
+    fun setEvaluationProgress(progress: Float) {
+        _uiState.update { it.copy(evaluationProgress = progress.coerceIn(0f, 1f)) }
+    }
+
+    fun playPauseEvaluation() {
+        val current = _uiState.value.evaluationProgress
+        if (current >= 0.99f) {
+            // 如果已完成，重新开始
+            restartEvaluation()
+        } else {
+            // 切换播放/暂停状态（通过检查是否在动画中）
+            _uiState.update { it.copy(evaluationProgress = if (current > 0f) current else 0.01f) }
+        }
+    }
+
+    fun restartEvaluation() {
+        _uiState.update { it.copy(evaluationProgress = 0f) }
+        // 重新触发自动播放
+        viewModelScope.launch {
+            val steps = 20
+            repeat(steps) { i ->
+                kotlinx.coroutines.delay(80)
+                _uiState.update { state ->
+                    state.copy(evaluationProgress = (i + 1) / steps.toFloat())
+                }
+            }
         }
     }
 
@@ -132,17 +167,30 @@ class VisualizationViewModel @Inject constructor() : ViewModel() {
             )
         }
 
+        // 解析 AST 用于可视化
+        val ast = evaluateUseCase.parse(expression).getOrNull()
+
         _uiState.update {
             it.copy(
                 bitGridBits = resultBits,
                 bitGridLabel = "RESULT = %.6f".format(result),
                 registers = registers,
+                currentAst = ast,
+                evaluationProgress = 0f,
                 lastEventDescription = "计算结果: $result"
             )
         }
 
+        // 自动播放求值进度动画
         viewModelScope.launch {
-            kotlinx.coroutines.delay(500)
+            val steps = 20
+            repeat(steps) { i ->
+                kotlinx.coroutines.delay(80)
+                _uiState.update { state ->
+                    state.copy(evaluationProgress = (i + 1) / steps.toFloat())
+                }
+            }
+            kotlinx.coroutines.delay(200)
             _uiState.update { state ->
                 val regs = state.registers.toMutableList()
                 if (regs.isNotEmpty()) {
@@ -150,6 +198,33 @@ class VisualizationViewModel @Inject constructor() : ViewModel() {
                 }
                 state.copy(registers = regs)
             }
+        }
+    }
+
+    private fun handleExpressionParsed(expression: String) {
+        val ast = evaluateUseCase.parse(expression).getOrNull()
+        _uiState.update {
+            it.copy(
+                currentAst = ast,
+                evaluationProgress = 0f,
+                lastEventDescription = "解析表达式"
+            )
+        }
+    }
+
+    private fun handleBitOperation(event: AnimationEvent.BitOperation) {
+        val leftBits = List(64) { i -> ((event.left shr i) and 1L) == 1L }
+        val rightBits = List(64) { i -> ((event.right shr i) and 1L) == 1L }
+        val resultBits = List(64) { i -> ((event.result shr i) and 1L) == 1L }
+
+        _uiState.update {
+            it.copy(
+                bitGridBits = resultBits,
+                bitGridLabel = "${event.op}: 0x${event.left.toString(16).uppercase()} ${event.op} 0x${event.right.toString(16).uppercase()}",
+                lastEventDescription = "位运算: ${event.op}",
+                bitOperationLeft = leftBits,
+                bitOperationRight = rightBits
+            )
         }
     }
 
@@ -198,5 +273,9 @@ data class VisualizationUiState(
     val stackFrames: List<StackFrameVisual> = emptyList(),
     val activeLevels: Set<VisualizationLevel> = VisualizationLevel.entries.toSet(),
     val isPanelExpanded: Boolean = false,
-    val lastEventDescription: String = ""
+    val lastEventDescription: String = "",
+    val currentAst: Expression? = null,
+    val evaluationProgress: Float = 0f,
+    val bitOperationLeft: List<Boolean> = emptyList(),
+    val bitOperationRight: List<Boolean> = emptyList()
 )

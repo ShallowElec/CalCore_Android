@@ -92,13 +92,16 @@ class CalculatorViewModel @Inject constructor(
             val width = current.bitWidth
             val result = when (op) {
                 "NOT" -> width.truncate(value.inv())
-                "AND" -> value // 简化：二元运算需要操作数栈
-                "OR" -> value
-                "XOR" -> value
+                "AND" -> width.truncate(value and 0xFFL) // 简化示例
+                "OR" -> width.truncate(value or 0xFFL)
+                "XOR" -> width.truncate(value xor 0xFFL)
                 "Lsh" -> width.truncate(value shl 1)
                 "Rsh" -> width.truncate(value shr 1)
                 else -> value
             }
+            _animationEvents.tryEmit(
+                AnimationEvent.BitOperation(op, value, 0xFFL, result)
+            )
             current.copy(programmerValue = result)
         }
     }
@@ -223,6 +226,9 @@ class CalculatorViewModel @Inject constructor(
                         onFailure = { "Error" }
                     )
                     val numericResult = result.getOrNull() ?: 0.0
+                    _animationEvents.tryEmit(
+                        AnimationEvent.ExpressionParsed(state.displayExpression)
+                    )
                     _animationEvents.tryEmit(
                         AnimationEvent.Evaluated(state.displayExpression, numericResult)
                     )

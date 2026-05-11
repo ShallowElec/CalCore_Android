@@ -37,6 +37,9 @@ fun CollapsibleVisualizationPanel(
     state: VisualizationUiState,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
+    onPlayPause: () -> Unit = {},
+    onScrub: (Float) -> Unit = {},
+    onRestart: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -77,7 +80,10 @@ fun CollapsibleVisualizationPanel(
                 state = state,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(280.dp)
+                    .height(280.dp),
+                onPlayPause = onPlayPause,
+                onScrub = onScrub,
+                onRestart = onRestart
             )
         }
     }

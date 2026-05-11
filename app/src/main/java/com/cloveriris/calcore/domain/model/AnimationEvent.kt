@@ -27,6 +27,17 @@ sealed class AnimationEvent {
 
     /** 小数点 */
     data object DecimalEntered : AnimationEvent()
+
+    /** 表达式已解析（等号执行时触发 AST 可视化） */
+    data class ExpressionParsed(val expression: String) : AnimationEvent()
+
+    /** 位运算（程序员模式） */
+    data class BitOperation(
+        val op: String,
+        val left: Long,
+        val right: Long,
+        val result: Long
+    ) : AnimationEvent()
 }
 
 enum class MemoryOpType {

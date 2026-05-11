@@ -36,7 +36,10 @@ import com.cloveriris.calcore.ui.theme.TerminalGreen
 @Composable
 fun VisualizationStage(
     state: VisualizationUiState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPlayPause: () -> Unit = {},
+    onScrub: (Float) -> Unit = {},
+    onRestart: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
 
@@ -56,6 +59,19 @@ fun VisualizationStage(
             VisualizationPlaceholder()
         } else {
             VisualizationLiveContent(state)
+        }
+
+        // 时间轴控制条（底部固定）
+        if (state.lastEventDescription.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            TimelineScrubber(
+                currentTimeMs = (state.evaluationProgress * 3000).toLong(),
+                totalTimeMs = 3000,
+                isPlaying = state.evaluationProgress in 0.01f..0.99f,
+                onPlayPause = onPlayPause,
+                onScrub = onScrub,
+                onRestart = onRestart
+            )
         }
     }
 }
@@ -87,6 +103,19 @@ private fun RowTitle(state: VisualizationUiState) {
 
 @Composable
 private fun VisualizationLiveContent(state: VisualizationUiState) {
+    // AST 树可视化（当有解析结果时显示）
+    if (state.currentAst != null) {
+        Text(
+            text = "ABSTRACT SYNTAX TREE",
+            color = TerminalGray,
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        AstTreeView(expression = state.currentAst)
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+
     // 64-bit 位格
     Text(
         text = state.bitGridLabel.ifEmpty { "64-BIT REGISTER" },
