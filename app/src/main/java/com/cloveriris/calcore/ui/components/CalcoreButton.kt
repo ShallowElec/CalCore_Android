@@ -1,7 +1,8 @@
 package com.cloveriris.calcore.ui.components
 
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -36,7 +37,7 @@ fun CalcoreButton(
         ButtonType.EQUALS -> {
             Button(
                 onClick = onClick,
-                modifier = modifier.aspectRatio(1f),
+                modifier = modifier.fillMaxHeight(),
                 enabled = enabled,
                 shape = RoundedCornerShape(16.dp),
                 contentPadding = PaddingValues(0.dp),
@@ -55,7 +56,7 @@ fun CalcoreButton(
         ButtonType.OPERATOR -> {
             Button(
                 onClick = onClick,
-                modifier = modifier.aspectRatio(1f),
+                modifier = modifier.fillMaxHeight(),
                 enabled = enabled,
                 shape = RoundedCornerShape(16.dp),
                 contentPadding = PaddingValues(0.dp),
@@ -74,7 +75,7 @@ fun CalcoreButton(
         ButtonType.FUNCTION -> {
             FilledTonalButton(
                 onClick = onClick,
-                modifier = modifier.aspectRatio(1f),
+                modifier = modifier.fillMaxHeight(),
                 enabled = enabled,
                 shape = RoundedCornerShape(16.dp),
                 contentPadding = PaddingValues(0.dp),
@@ -93,7 +94,7 @@ fun CalcoreButton(
         ButtonType.MEMORY -> {
             FilledTonalButton(
                 onClick = onClick,
-                modifier = modifier.aspectRatio(1f),
+                modifier = modifier.fillMaxHeight(),
                 enabled = enabled,
                 shape = RoundedCornerShape(16.dp),
                 contentPadding = PaddingValues(0.dp),
@@ -112,7 +113,7 @@ fun CalcoreButton(
         ButtonType.NUMBER -> {
             FilledTonalButton(
                 onClick = onClick,
-                modifier = modifier.aspectRatio(1f),
+                modifier = modifier.fillMaxHeight(),
                 enabled = enabled,
                 shape = RoundedCornerShape(16.dp),
                 contentPadding = PaddingValues(0.dp),

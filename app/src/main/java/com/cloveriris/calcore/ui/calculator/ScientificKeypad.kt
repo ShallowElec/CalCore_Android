@@ -3,6 +3,7 @@ package com.cloveriris.calcore.ui.calculator
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -12,12 +13,6 @@ import com.cloveriris.calcore.domain.model.CalculatorInput
 import com.cloveriris.calcore.ui.components.ButtonType
 import com.cloveriris.calcore.ui.components.CalcoreButton
 
-/**
- * 科学计算器按键面板
- *
- * 在标准按键上方增加科学函数行。
- * 横屏时科学函数与数字键左右并排；竖屏时上下堆叠。
- */
 @Composable
 fun ScientificKeypad(
     onInput: (CalculatorInput) -> Unit,
@@ -26,51 +21,34 @@ fun ScientificKeypad(
 ) {
     Column(
         modifier = modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .fillMaxSize()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // 角度/辅助行
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            CalcoreButton(
-                label = "DEG",
-                onClick = { /* TODO: angle mode toggle */ },
-                modifier = Modifier.weight(1f),
-                type = ButtonType.FUNCTION
-            )
-            CalcoreButton(
-                label = "HYP",
-                onClick = { /* TODO: hyperbolic toggle */ },
-                modifier = Modifier.weight(1f),
-                type = ButtonType.FUNCTION
-            )
-            CalcoreButton(
-                label = "F-E",
-                onClick = { /* TODO: engineering notation */ },
-                modifier = Modifier.weight(1f),
-                type = ButtonType.FUNCTION
-            )
-            CalcoreButton(
-                label = "π",
-                onClick = { onInput(CalculatorInput.Digit("π")) },
-                modifier = Modifier.weight(1f),
-                type = ButtonType.FUNCTION
-            )
-            CalcoreButton(
-                label = "e",
-                onClick = { onInput(CalculatorInput.Digit("e")) },
-                modifier = Modifier.weight(1f),
-                type = ButtonType.FUNCTION
-            )
+            listOf("DEG", "HYP", "F-E", "π", "e").forEach { label ->
+                val input = when (label) {
+                    "π" -> CalculatorInput.Digit("π")
+                    "e" -> CalculatorInput.Digit("e")
+                    else -> CalculatorInput.Digit(label)
+                }
+                CalcoreButton(
+                    label = label,
+                    onClick = { onInput(input) },
+                    modifier = Modifier.weight(1f),
+                    type = ButtonType.FUNCTION
+                )
+            }
         }
 
         // 内存行
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             CalcoreButton(
                 label = "MC",
@@ -106,8 +84,8 @@ fun ScientificKeypad(
 
         // 科学函数行 1
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("x²", "xʸ", "sin", "cos", "tan").forEach { label ->
                 val input = when (label) {
@@ -129,8 +107,8 @@ fun ScientificKeypad(
 
         // 科学函数行 2
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("x³", "³√x", "sin⁻¹", "cos⁻¹", "tan⁻¹").forEach { label ->
                 CalcoreButton(
@@ -144,8 +122,8 @@ fun ScientificKeypad(
 
         // 科学函数行 3
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("√", "10ˣ", "log", "Exp", "Mod").forEach { label ->
                 val input = when (label) {
@@ -165,8 +143,8 @@ fun ScientificKeypad(
 
         // 科学函数行 4
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("¹/x", "eˣ", "ln", "dms", "deg").forEach { label ->
                 val input = when (label) {
@@ -185,8 +163,8 @@ fun ScientificKeypad(
 
         // 标准功能行
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             CalcoreButton(
                 label = "CE",
@@ -222,8 +200,8 @@ fun ScientificKeypad(
         )
         numbers.forEach { row ->
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 row.forEach { label ->
                     val type = if (label in listOf("×", "-", "+")) {
@@ -248,8 +226,8 @@ fun ScientificKeypad(
 
         // 底部行
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             CalcoreButton(
                 label = "±",
