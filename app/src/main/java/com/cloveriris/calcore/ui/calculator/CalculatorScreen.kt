@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,10 +51,13 @@ import com.cloveriris.calcore.domain.model.CalculatorMode
 import com.cloveriris.calcore.domain.model.SidePanelTab
 import com.cloveriris.calcore.presentation.calculator.CalculatorUiState
 import com.cloveriris.calcore.presentation.calculator.CalculatorViewModel
-import com.cloveriris.calcore.ui.components.DrawerMenu
+import com.cloveriris.calcore.presentation.visualization.VisualizationUiState
+import com.cloveriris.calcore.presentation.visualization.VisualizationViewModel
 import com.cloveriris.calcore.ui.components.CalcoreDisplay
+import com.cloveriris.calcore.ui.components.DrawerMenu
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
 import com.cloveriris.calcore.ui.theme.TerminalBackground
+import com.cloveriris.calcore.ui.visualization.BottomControlBar
 import com.cloveriris.calcore.ui.visualization.VisualizationStage
 import kotlinx.coroutines.launch
 
@@ -63,12 +67,21 @@ fun CalculatorScreen(
     onNavigateToGraphing: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
-    viewModel: CalculatorViewModel = hiltViewModel()
+    viewModel: CalculatorViewModel = hiltViewModel(),
+    visualizationViewModel: VisualizationViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val visState by visualizationViewModel.uiState.collectAsStateWithLifecycle()
     val isExpanded = windowWidthSizeClass != WindowWidthSizeClass.Compact
     val drawerState = rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    // 桥接 CalculatorViewModel 的 animationEvents → VisualizationViewModel
+    LaunchedEffect(Unit) {
+        viewModel.animationEvents.collect { event ->
+            visualizationViewModel.onEvent(event)
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -88,27 +101,31 @@ fun CalculatorScreen(
         modifier = modifier
     ) {
         Scaffold(
-            topBar = {}, // 使用自定义顶部栏
+            topBar = {},
             modifier = Modifier.fillMaxSize()
         ) { innerPadding ->
             if (isExpanded) {
                 LandscapeLayout(
                     uiState = uiState,
+                    visState = visState,
                     onInput = viewModel::onInput,
                     onTabChange = viewModel::onTabChange,
                     onRecallHistory = viewModel::recallHistory,
                     onClearHistory = viewModel::clearHistory,
                     onOpenDrawer = { scope.launch { drawerState.open() } },
+                    onToggleVisPanel = { visualizationViewModel.setPanelExpanded(!visState.isPanelExpanded) },
                     modifier = Modifier.padding(innerPadding)
                 )
             } else {
                 PortraitLayout(
                     uiState = uiState,
+                    visState = visState,
                     onInput = viewModel::onInput,
                     onTabChange = viewModel::onTabChange,
                     onRecallHistory = viewModel::recallHistory,
                     onClearHistory = viewModel::clearHistory,
                     onOpenDrawer = { scope.launch { drawerState.open() } },
+                    onToggleVisPanel = { visualizationViewModel.setPanelExpanded(!visState.isPanelExpanded) },
                     modifier = Modifier.padding(innerPadding)
                 )
             }
@@ -121,21 +138,33 @@ fun CalculatorScreen(
 @Composable
 private fun PortraitLayout(
     uiState: CalculatorUiState,
+    visState: VisualizationUiState,
     onInput: (CalculatorInput) -> Unit,
     onTabChange: (SidePanelTab) -> Unit,
     onRecallHistory: (com.cloveriris.calcore.domain.model.HistoryEntry) -> Unit,
     onClearHistory: () -> Unit,
     onOpenDrawer: () -> Unit,
+    onToggleVisPanel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
-        // 自定义顶部栏
+        // 顶部栏
         CalculatorHeader(
             mode = uiState.mode,
             activeTab = uiState.activeTab,
+            tabs = listOf(SidePanelTab.HISTORY, SidePanelTab.MEMORY, SidePanelTab.VISUALIZATION),
             onTabChange = onTabChange,
             onOpenDrawer = onOpenDrawer
         )
+
+        // 可折叠可视化面板（仅当 Tab 为 NONE 或 VISUALIZATION 时显示）
+        if (uiState.activeTab == SidePanelTab.NONE || uiState.activeTab == SidePanelTab.VISUALIZATION) {
+            CollapsibleVisualizationPanel(
+                state = visState,
+                isExpanded = visState.isPanelExpanded,
+                onToggleExpand = onToggleVisPanel
+            )
+        }
 
         // 显示区
         CalcoreDisplay(
@@ -143,10 +172,10 @@ private fun PortraitLayout(
             result = uiState.state.displayResult,
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
+                .weight(0.8f)
         )
 
-        // Tab 内容区 或 按键区
+        // 内容区：按键 / 历史 / 内存 / 可视化
         when (uiState.activeTab) {
             SidePanelTab.HISTORY -> {
                 HistoryPanel(
@@ -155,7 +184,7 @@ private fun PortraitLayout(
                     onClear = onClearHistory,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(2.5f)
+                        .weight(2.2f)
                 )
             }
             SidePanelTab.MEMORY -> {
@@ -163,14 +192,23 @@ private fun PortraitLayout(
                     memory = uiState.memory,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(2.5f)
+                        .weight(2.2f)
+                )
+            }
+            SidePanelTab.VISUALIZATION -> {
+                // 可视化 Tab：全屏可视化内容（不含折叠条）
+                VisualizationStage(
+                    state = visState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(2.2f)
                 )
             }
             else -> {
                 // 按键区
                 val keypadModifier = Modifier
                     .fillMaxWidth()
-                    .weight(2.5f)
+                    .weight(2.2f)
                 when (uiState.mode) {
                     CalculatorMode.SCIENTIFIC -> ScientificKeypad(
                         onInput = onInput,
@@ -185,6 +223,12 @@ private fun PortraitLayout(
                 }
             }
         }
+
+        // 底部控制条
+        BottomControlBar(
+            architecture = visState.architecture,
+            activeLevels = visState.activeLevels
+        )
     }
 }
 
@@ -193,11 +237,13 @@ private fun PortraitLayout(
 @Composable
 private fun LandscapeLayout(
     uiState: CalculatorUiState,
+    visState: VisualizationUiState,
     onInput: (CalculatorInput) -> Unit,
     onTabChange: (SidePanelTab) -> Unit,
     onRecallHistory: (com.cloveriris.calcore.domain.model.HistoryEntry) -> Unit,
     onClearHistory: () -> Unit,
     onOpenDrawer: () -> Unit,
+    onToggleVisPanel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var isRightExpanded by remember { mutableStateOf(false) }
@@ -212,177 +258,127 @@ private fun LandscapeLayout(
         label = "rightWeight"
     )
 
-    Row(modifier = modifier.fillMaxSize()) {
-        // 左侧：计算器主体
-        Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .weight(leftWeight)
-        ) {
-            CalculatorHeader(
-                mode = uiState.mode,
-                activeTab = SidePanelTab.NONE, // 横屏时顶部不显示 tab
-                onTabChange = {},
-                onOpenDrawer = onOpenDrawer,
-                showTabs = false
-            )
-
-            CalcoreDisplay(
-                expression = uiState.state.displayExpression,
-                result = uiState.state.displayResult,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.6f)
-            )
-
-            val keypadModifier = Modifier
-                .fillMaxWidth()
-                .weight(1.4f)
-            when (uiState.mode) {
-                CalculatorMode.SCIENTIFIC -> ScientificKeypad(
-                    onInput = onInput,
-                    hasMemory = uiState.memory.hasValue,
-                    modifier = keypadModifier
-                )
-                else -> StandardKeypad(
-                    onInput = onInput,
-                    hasMemory = uiState.memory.hasValue,
-                    modifier = keypadModifier
-                )
-            }
-        }
-
-        // 分隔线
-        HorizontalDivider(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(1.dp),
-            color = MaterialTheme.colorScheme.outlineVariant
-        )
-
-        // 右侧：可展开面板
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .weight(rightWeight)
-                .background(TerminalBackground)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = { isRightExpanded = !isRightExpanded }
-                )
-                .animateContentSize()
-        ) {
-            LandscapeSidePanel(
-                uiState = uiState,
-                isExpanded = isRightExpanded,
-                onToggleExpand = { isRightExpanded = !isRightExpanded },
-                onTabChange = onTabChange,
-                onRecallHistory = onRecallHistory,
-                onClearHistory = onClearHistory
-            )
-        }
-    }
-}
-
-// ==================== 横屏右侧面板 ====================
-
-@Composable
-private fun LandscapeSidePanel(
-    uiState: CalculatorUiState,
-    isExpanded: Boolean,
-    onToggleExpand: () -> Unit,
-    onTabChange: (SidePanelTab) -> Unit,
-    onRecallHistory: (com.cloveriris.calcore.domain.model.HistoryEntry) -> Unit,
-    onClearHistory: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    // 横屏右侧面板默认展示可视化，但带有切换到历史/内存的 tab
-    var rightTab by remember { mutableStateOf(SidePanelTab.VISUALIZATION) }
-
     Column(modifier = modifier.fillMaxSize()) {
-        // 顶部 tab 栏 + 展开按钮
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row {
-                LandscapeTabButton(
-                    label = "可视化",
-                    selected = rightTab == SidePanelTab.VISUALIZATION,
-                    onClick = { rightTab = SidePanelTab.VISUALIZATION }
+        Row(modifier = Modifier.weight(1f)) {
+            // 左侧：计算器主体
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(leftWeight)
+            ) {
+                CalculatorHeader(
+                    mode = uiState.mode,
+                    activeTab = uiState.activeTab,
+                    tabs = listOf(SidePanelTab.HISTORY, SidePanelTab.MEMORY),
+                    onTabChange = onTabChange,
+                    onOpenDrawer = onOpenDrawer
                 )
-                Spacer(modifier = Modifier.width(16.dp))
-                LandscapeTabButton(
-                    label = "历史记录",
-                    selected = rightTab == SidePanelTab.HISTORY,
-                    onClick = { rightTab = SidePanelTab.HISTORY }
+
+                CalcoreDisplay(
+                    expression = uiState.state.displayExpression,
+                    result = uiState.state.displayResult,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(0.5f)
                 )
-                Spacer(modifier = Modifier.width(16.dp))
-                LandscapeTabButton(
-                    label = "内存",
-                    selected = rightTab == SidePanelTab.MEMORY,
-                    onClick = { rightTab = SidePanelTab.MEMORY }
-                )
+
+                // 横屏时左侧也显示历史/内存小面板（可切换）
+                when (uiState.activeTab) {
+                    SidePanelTab.HISTORY -> {
+                        HistoryPanel(
+                            history = uiState.history,
+                            onRecall = onRecallHistory,
+                            onClear = onClearHistory,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(0.4f)
+                        )
+                    }
+                    SidePanelTab.MEMORY -> {
+                        MemoryPanel(
+                            memory = uiState.memory,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(0.4f)
+                        )
+                    }
+                    else -> { /* 占位，不占空间 */ }
+                }
+
+                val keypadModifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1.1f)
+                when (uiState.mode) {
+                    CalculatorMode.SCIENTIFIC -> ScientificKeypad(
+                        onInput = onInput,
+                        hasMemory = uiState.memory.hasValue,
+                        modifier = keypadModifier
+                    )
+                    else -> StandardKeypad(
+                        onInput = onInput,
+                        hasMemory = uiState.memory.hasValue,
+                        modifier = keypadModifier
+                    )
+                }
             }
 
-            IconButton(onClick = onToggleExpand) {
-                Icon(
-                    imageVector = if (isExpanded)
-                        Icons.AutoMirrored.Filled.KeyboardArrowLeft
-                    else
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = if (isExpanded) "收缩" else "展开",
-                    tint = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f)
-                )
+            // 分隔线
+            HorizontalDivider(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(1.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+
+            // 右侧：可视化舞台（点击可展开）
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(rightWeight)
+                    .background(TerminalBackground)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { isRightExpanded = !isRightExpanded }
+                    )
+                    .animateContentSize()
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // 展开/收缩按钮
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(end = 4.dp, top = 4.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        IconButton(onClick = { isRightExpanded = !isRightExpanded }) {
+                            Icon(
+                                imageVector = if (isRightExpanded)
+                                    Icons.AutoMirrored.Filled.KeyboardArrowLeft
+                                else
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = if (isRightExpanded) "收缩" else "展开",
+                                tint = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+
+                    // 可视化内容
+                    VisualizationStage(
+                        state = visState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    )
+
+                    // 底部控制条
+                    BottomControlBar(
+                        architecture = visState.architecture,
+                        activeLevels = visState.activeLevels
+                    )
+                }
             }
         }
-
-        HorizontalDivider(color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.1f))
-
-        // 内容区
-        when (rightTab) {
-            SidePanelTab.VISUALIZATION -> {
-                VisualizationStage(
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SidePanelTab.HISTORY -> {
-                HistoryPanel(
-                    history = uiState.history,
-                    onRecall = onRecallHistory,
-                    onClear = onClearHistory,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SidePanelTab.MEMORY -> {
-                MemoryPanel(
-                    memory = uiState.memory,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            else -> {}
-        }
-    }
-}
-
-@Composable
-private fun LandscapeTabButton(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    TextButton(onClick = onClick) {
-        Text(
-            text = label,
-            fontSize = 13.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) androidx.compose.ui.graphics.Color.White
-            else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.5f)
-        )
     }
 }
 
@@ -392,9 +388,9 @@ private fun LandscapeTabButton(
 private fun CalculatorHeader(
     mode: CalculatorMode,
     activeTab: SidePanelTab,
+    tabs: List<SidePanelTab>,
     onTabChange: (SidePanelTab) -> Unit,
-    onOpenDrawer: () -> Unit,
-    showTabs: Boolean = true
+    onOpenDrawer: () -> Unit
 ) {
     val modeTitle = when (mode) {
         CalculatorMode.STANDARD -> "标准"
@@ -411,9 +407,7 @@ private fun CalculatorHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 左侧：汉堡 + 模式名
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onOpenDrawer) {
                 Icon(
                     imageVector = Icons.Default.Menu,
@@ -431,51 +425,34 @@ private fun CalculatorHeader(
         }
 
         // 右侧：Tab
-        if (showTabs) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                HeaderTabButton(
-                    label = "历史记录",
-                    selected = activeTab == SidePanelTab.HISTORY,
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            tabs.forEach { tab ->
+                val label = when (tab) {
+                    SidePanelTab.HISTORY -> "历史记录"
+                    SidePanelTab.MEMORY -> "内存"
+                    SidePanelTab.VISUALIZATION -> "可视化"
+                    else -> ""
+                }
+                val selected = activeTab == tab
+                TextButton(
                     onClick = {
-                        onTabChange(
-                            if (activeTab == SidePanelTab.HISTORY) SidePanelTab.NONE
-                            else SidePanelTab.HISTORY
-                        )
-                    }
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                HeaderTabButton(
-                    label = "内存",
-                    selected = activeTab == SidePanelTab.MEMORY,
-                    onClick = {
-                        onTabChange(
-                            if (activeTab == SidePanelTab.MEMORY) SidePanelTab.NONE
-                            else SidePanelTab.MEMORY
-                        )
-                    }
-                )
+                        onTabChange(if (selected) SidePanelTab.NONE else tab)
+                    },
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text(
+                        text = label,
+                        fontSize = 14.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (tab != tabs.last()) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun HeaderTabButton(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    TextButton(
-        onClick = onClick,
-        modifier = Modifier.height(36.dp)
-    ) {
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 

@@ -2,16 +2,21 @@ package com.cloveriris.calcore.presentation.calculator
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cloveriris.calcore.domain.model.AnimationEvent
 import com.cloveriris.calcore.domain.model.CalculatorInput
 import com.cloveriris.calcore.domain.model.CalculatorMode
 import com.cloveriris.calcore.domain.model.CalculatorState
 import com.cloveriris.calcore.domain.model.HistoryEntry
+import com.cloveriris.calcore.domain.model.MemoryOpType
 import com.cloveriris.calcore.domain.model.MemoryState
 import com.cloveriris.calcore.domain.model.SidePanelTab
 import com.cloveriris.calcore.domain.usecase.EvaluateUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -26,6 +31,9 @@ class CalculatorViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(CalculatorUiState())
     val uiState: StateFlow<CalculatorUiState> = _uiState.asStateFlow()
+
+    private val _animationEvents = MutableSharedFlow<AnimationEvent>(extraBufferCapacity = 10)
+    val animationEvents: SharedFlow<AnimationEvent> = _animationEvents.asSharedFlow()
 
     fun onInput(input: CalculatorInput) {
         when (input) {
@@ -78,6 +86,7 @@ class CalculatorViewModel @Inject constructor(
         _uiState.update { current ->
             when (val state = current.state) {
                 is CalculatorState.Idle -> {
+                    _animationEvents.tryEmit(AnimationEvent.DigitEntered(digit.first(), digit))
                     current.copy(state = CalculatorState.Inputting(digit))
                 }
                 is CalculatorState.Inputting -> {
@@ -86,9 +95,11 @@ class CalculatorViewModel @Inject constructor(
                     } else {
                         state.displayExpression + digit
                     }
+                    _animationEvents.tryEmit(AnimationEvent.DigitEntered(digit.first(), newExpr))
                     current.copy(state = state.copy(displayExpression = newExpr))
                 }
                 is CalculatorState.Evaluated -> {
+                    _animationEvents.tryEmit(AnimationEvent.DigitEntered(digit.first(), digit))
                     current.copy(state = CalculatorState.Inputting(digit))
                 }
             }
@@ -100,6 +111,7 @@ class CalculatorViewModel @Inject constructor(
             when (val state = current.state) {
                 is CalculatorState.Idle -> {
                     if (op == "-") {
+                        _animationEvents.tryEmit(AnimationEvent.OperatorEntered(op, op))
                         current.copy(state = CalculatorState.Inputting(op))
                     } else {
                         current
@@ -112,13 +124,14 @@ class CalculatorViewModel @Inject constructor(
                     } else {
                         expr + op
                     }
+                    _animationEvents.tryEmit(AnimationEvent.OperatorEntered(op, newExpr))
                     current.copy(state = state.copy(displayExpression = newExpr))
                 }
                 is CalculatorState.Evaluated -> {
+                    val newExpr = state.displayResult + op
+                    _animationEvents.tryEmit(AnimationEvent.OperatorEntered(op, newExpr))
                     current.copy(
-                        state = CalculatorState.Inputting(
-                            displayExpression = state.displayResult + op
-                        )
+                        state = CalculatorState.Inputting(displayExpression = newExpr)
                     )
                 }
             }
@@ -129,12 +142,14 @@ class CalculatorViewModel @Inject constructor(
         _uiState.update { current ->
             when (val state = current.state) {
                 is CalculatorState.Idle -> {
+                    _animationEvents.tryEmit(AnimationEvent.DecimalEntered)
                     current.copy(state = CalculatorState.Inputting("0."))
                 }
                 is CalculatorState.Inputting -> {
                     val parts = state.displayExpression.split(Regex("[+\\-×÷]"))
                     val lastNumber = parts.last()
                     if (!lastNumber.contains(".")) {
+                        _animationEvents.tryEmit(AnimationEvent.DecimalEntered)
                         current.copy(
                             state = state.copy(
                                 displayExpression = state.displayExpression + "."
@@ -145,6 +160,7 @@ class CalculatorViewModel @Inject constructor(
                     }
                 }
                 is CalculatorState.Evaluated -> {
+                    _animationEvents.tryEmit(AnimationEvent.DecimalEntered)
                     current.copy(state = CalculatorState.Inputting("0."))
                 }
             }
@@ -159,6 +175,10 @@ class CalculatorViewModel @Inject constructor(
                     val resultStr = result.fold(
                         onSuccess = ::formatResult,
                         onFailure = { "Error" }
+                    )
+                    val numericResult = result.getOrNull() ?: 0.0
+                    _animationEvents.tryEmit(
+                        AnimationEvent.Evaluated(state.displayExpression, numericResult)
                     )
                     val newHistory = if (result.isSuccess) {
                         listOf(
@@ -182,10 +202,12 @@ class CalculatorViewModel @Inject constructor(
     }
 
     private fun onClear() {
+        _animationEvents.tryEmit(AnimationEvent.Clear)
         _uiState.update { it.copy(state = CalculatorState.Idle()) }
     }
 
     private fun onClearEntry() {
+        _animationEvents.tryEmit(AnimationEvent.Clear)
         _uiState.update { current ->
             when (current.state) {
                 is CalculatorState.Inputting -> {
@@ -200,6 +222,7 @@ class CalculatorViewModel @Inject constructor(
         _uiState.update { current ->
             when (val state = current.state) {
                 is CalculatorState.Inputting -> {
+                    _animationEvents.tryEmit(AnimationEvent.Backspace)
                     val newExpr = state.displayExpression.dropLast(1)
                     if (newExpr.isEmpty() || newExpr == "-") {
                         current.copy(state = CalculatorState.Idle())
@@ -208,6 +231,7 @@ class CalculatorViewModel @Inject constructor(
                     }
                 }
                 is CalculatorState.Evaluated -> {
+                    _animationEvents.tryEmit(AnimationEvent.Backspace)
                     current.copy(state = CalculatorState.Idle())
                 }
                 else -> current
@@ -321,10 +345,12 @@ class CalculatorViewModel @Inject constructor(
     }
 
     private fun onMemoryClear() {
+        _animationEvents.tryEmit(AnimationEvent.MemoryOperation(MemoryOpType.CLEAR))
         _uiState.update { it.copy(memory = MemoryState()) }
     }
 
     private fun onMemoryRecall() {
+        _animationEvents.tryEmit(AnimationEvent.MemoryOperation(MemoryOpType.RECALL))
         _uiState.update { current ->
             if (current.memory.hasValue) {
                 current.copy(
@@ -341,6 +367,7 @@ class CalculatorViewModel @Inject constructor(
     private fun onMemoryStore() {
         _uiState.update { current ->
             val value = getCurrentValue(current.state)
+            _animationEvents.tryEmit(AnimationEvent.MemoryOperation(MemoryOpType.STORE))
             current.copy(memory = MemoryState(value = value, hasValue = true))
         }
     }
@@ -349,6 +376,7 @@ class CalculatorViewModel @Inject constructor(
         _uiState.update { current ->
             val value = getCurrentValue(current.state)
             val newValue = if (current.memory.hasValue) current.memory.value + value else value
+            _animationEvents.tryEmit(AnimationEvent.MemoryOperation(MemoryOpType.ADD))
             current.copy(memory = MemoryState(value = newValue, hasValue = true))
         }
     }
@@ -357,6 +385,7 @@ class CalculatorViewModel @Inject constructor(
         _uiState.update { current ->
             val value = getCurrentValue(current.state)
             val newValue = if (current.memory.hasValue) current.memory.value - value else -value
+            _animationEvents.tryEmit(AnimationEvent.MemoryOperation(MemoryOpType.SUBTRACT))
             current.copy(memory = MemoryState(value = newValue, hasValue = true))
         }
     }
