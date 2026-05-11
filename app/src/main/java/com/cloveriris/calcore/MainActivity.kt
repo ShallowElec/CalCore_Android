@@ -17,15 +17,18 @@ import com.cloveriris.calcore.data.local.ThemeDataStore
 import com.cloveriris.calcore.navigation.CalcoreNavHost
 import com.cloveriris.calcore.ui.theme.AppTheme
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    private lateinit var themeDataStore: ThemeDataStore
+    @Inject
+    lateinit var themeDataStore: ThemeDataStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        themeDataStore = ThemeDataStore(this)
         enableEdgeToEdge()
         setContent {
             val appTheme by themeDataStore.appTheme.collectAsState(initial = AppTheme.SYSTEM_DYNAMIC)

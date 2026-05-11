@@ -11,6 +11,11 @@ composeBom = "2026.02.01"
 
 # Navigation & Architecture
 navigationCompose = "2.9.0"
+hilt = "2.59.2"
+hiltNavigationCompose = "1.2.0"
+
+# KSP (KSP2, independent versioning since 2.3.0)
+ksp = "2.3.0"
 
 # Data persistence
 datastore = "1.1.6"
@@ -35,9 +40,17 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 # Navigation
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 
+# Hilt
+hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
+hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
+hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
+
 # DataStore
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
