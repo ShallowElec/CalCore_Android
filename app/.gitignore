@@ -1,0 +1,14 @@
+/build
+/proguard-rules.pro.user
+/release/
+/debug/
+*.apk
+*.ap_
+*.aab
+
+# External native build
+.externalNativeBuild
+.cxx/
+
+# NDK
+obj/
