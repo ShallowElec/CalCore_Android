@@ -1,11 +1,9 @@
 package com.cloveriris.calcore.ui.calculator
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -13,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import com.cloveriris.calcore.domain.model.CalculatorInput
 import com.cloveriris.calcore.ui.components.ButtonType
 import com.cloveriris.calcore.ui.components.CalcoreButton
+import com.cloveriris.calcore.ui.components.ScrollableKeypadContainer
 
 @Composable
 fun StandardKeypad(
@@ -20,17 +19,12 @@ fun StandardKeypad(
     modifier: Modifier = Modifier,
     hasMemory: Boolean = false
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
+    ScrollableKeypadContainer(modifier = modifier) {
+        val rowHeight = 56.dp
+
         // Memory row
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             CalcoreButton(
@@ -67,9 +61,7 @@ fun StandardKeypad(
 
         // Function row 1
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             CalcoreButton(
@@ -100,9 +92,7 @@ fun StandardKeypad(
 
         // Function row 2
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             CalcoreButton(
@@ -140,9 +130,7 @@ fun StandardKeypad(
 
         numbers.forEach { row ->
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                modifier = Modifier.fillMaxWidth().height(rowHeight),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 row.forEach { label ->
@@ -168,9 +156,7 @@ fun StandardKeypad(
 
         // Bottom row
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             CalcoreButton(
