@@ -3,9 +3,11 @@ package com.cloveriris.calcore.ui.calculator
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -21,13 +23,16 @@ fun ScientificKeypad(
 ) {
     Column(
         modifier = modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        val rowHeight = 52.dp
+
         // 角度/辅助行
         Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("DEG", "HYP", "F-E", "π", "e").forEach { label ->
@@ -47,7 +52,7 @@ fun ScientificKeypad(
 
         // 内存行
         Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             CalcoreButton(
@@ -84,7 +89,7 @@ fun ScientificKeypad(
 
         // 科学函数行 1
         Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("x²", "xʸ", "sin", "cos", "tan").forEach { label ->
@@ -107,7 +112,7 @@ fun ScientificKeypad(
 
         // 科学函数行 2
         Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("x³", "³√x", "sin⁻¹", "cos⁻¹", "tan⁻¹").forEach { label ->
@@ -122,7 +127,7 @@ fun ScientificKeypad(
 
         // 科学函数行 3
         Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("√", "10ˣ", "log", "Exp", "Mod").forEach { label ->
@@ -143,7 +148,7 @@ fun ScientificKeypad(
 
         // 科学函数行 4
         Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("¹/x", "eˣ", "ln", "dms", "deg").forEach { label ->
@@ -163,7 +168,7 @@ fun ScientificKeypad(
 
         // 标准功能行
         Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             CalcoreButton(
@@ -200,7 +205,7 @@ fun ScientificKeypad(
         )
         numbers.forEach { row ->
             Row(
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier.fillMaxWidth().height(rowHeight),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 row.forEach { label ->
@@ -226,7 +231,7 @@ fun ScientificKeypad(
 
         // 底部行
         Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             CalcoreButton(

@@ -152,7 +152,7 @@ private fun PortraitLayout(
         CalculatorHeader(
             mode = uiState.mode,
             activeTab = uiState.activeTab,
-            tabs = listOf(SidePanelTab.HISTORY, SidePanelTab.MEMORY, SidePanelTab.VISUALIZATION),
+            tabs = listOf(SidePanelTab.HISTORY, SidePanelTab.MEMORY),
             onTabChange = onTabChange,
             onOpenDrawer = onOpenDrawer
         )
@@ -196,13 +196,23 @@ private fun PortraitLayout(
                 )
             }
             SidePanelTab.VISUALIZATION -> {
-                // 可视化 Tab：全屏可视化内容（不含折叠条）
-                VisualizationStage(
-                    state = visState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(2.2f)
-                )
+                // 可视化 Tab 已移除，回退到按键
+                onTabChange(SidePanelTab.NONE)
+                val keypadModifier = Modifier
+                    .fillMaxWidth()
+                    .weight(2.2f)
+                when (uiState.mode) {
+                    CalculatorMode.SCIENTIFIC -> ScientificKeypad(
+                        onInput = onInput,
+                        hasMemory = uiState.memory.hasValue,
+                        modifier = keypadModifier
+                    )
+                    else -> StandardKeypad(
+                        onInput = onInput,
+                        hasMemory = uiState.memory.hasValue,
+                        modifier = keypadModifier
+                    )
+                }
             }
             else -> {
                 // 按键区
@@ -430,9 +440,9 @@ private fun CalculatorHeader(
                 val label = when (tab) {
                     SidePanelTab.HISTORY -> "历史记录"
                     SidePanelTab.MEMORY -> "内存"
-                    SidePanelTab.VISUALIZATION -> "可视化"
                     else -> ""
                 }
+                if (label.isEmpty()) return@forEach
                 val selected = activeTab == tab
                 TextButton(
                     onClick = {
