@@ -67,6 +67,9 @@ import kotlinx.coroutines.launch
 fun CalculatorScreen(
     windowWidthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.Compact,
     onNavigateToGraphing: () -> Unit = {},
+    onNavigateToLinearAlgebra: () -> Unit = {},
+    onNavigateToCalculus: () -> Unit = {},
+    onNavigateToDifferentialEquations: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: CalculatorViewModel = hiltViewModel(),
@@ -93,6 +96,22 @@ fun CalculatorScreen(
                 onModeSelected = { mode ->
                     viewModel.onModeChange(mode)
                     scope.launch { drawerState.close() }
+                },
+                onNavigateToGraphing = {
+                    scope.launch { drawerState.close() }
+                    onNavigateToGraphing()
+                },
+                onNavigateToLinearAlgebra = {
+                    scope.launch { drawerState.close() }
+                    onNavigateToLinearAlgebra()
+                },
+                onNavigateToCalculus = {
+                    scope.launch { drawerState.close() }
+                    onNavigateToCalculus()
+                },
+                onNavigateToDifferentialEquations = {
+                    scope.launch { drawerState.close() }
+                    onNavigateToDifferentialEquations()
                 },
                 onNavigateToSettings = {
                     scope.launch { drawerState.close() }
@@ -262,6 +281,15 @@ private fun PortraitLayout(
                 when (uiState.mode) {
                     CalculatorMode.SCIENTIFIC -> ScientificKeypad(
                         onInput = onInput,
+                        hasMemory = uiState.memory.hasValue,
+                        modifier = keypadModifier
+                    )
+                    CalculatorMode.PROGRAMMER -> ProgrammerKeypad(
+                        currentBase = uiState.numberBase,
+                        currentBitWidth = uiState.bitWidth,
+                        onInput = onInput,
+                        onBaseChange = onBaseChange,
+                        onBitWidthChange = onBitWidthChange,
                         hasMemory = uiState.memory.hasValue,
                         modifier = keypadModifier
                     )

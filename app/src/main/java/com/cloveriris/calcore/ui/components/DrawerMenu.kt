@@ -44,7 +44,12 @@ import com.cloveriris.calcore.domain.model.CalculatorMode
 @Composable
 fun DrawerMenu(
     currentMode: CalculatorMode,
+    currentDestination: String = "",
     onModeSelected: (CalculatorMode) -> Unit,
+    onNavigateToGraphing: () -> Unit = {},
+    onNavigateToLinearAlgebra: () -> Unit = {},
+    onNavigateToCalculus: () -> Unit = {},
+    onNavigateToDifferentialEquations: () -> Unit = {},
     onNavigateToSettings: () -> Unit,
     onNavigateToAbout: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -96,31 +101,90 @@ fun DrawerMenu(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // === 计算器 ===
-                DrawerSectionTitle("计算器")
+                // === 计算 ===
+                DrawerSectionTitle("计算")
                 DrawerItem(
                     label = "标准",
                     icon = { Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    selected = currentMode == CalculatorMode.STANDARD,
+                    selected = currentMode == CalculatorMode.STANDARD && currentDestination.isEmpty(),
                     onClick = { onModeSelected(CalculatorMode.STANDARD) }
                 )
                 DrawerItem(
                     label = "科学",
                     icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    selected = currentMode == CalculatorMode.SCIENTIFIC,
+                    selected = currentMode == CalculatorMode.SCIENTIFIC && currentDestination.isEmpty(),
                     onClick = { onModeSelected(CalculatorMode.SCIENTIFIC) }
                 )
                 DrawerItem(
                     label = "程序员",
                     icon = { Icon(Icons.Default.SquareFoot, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    selected = currentMode == CalculatorMode.PROGRAMMER,
+                    selected = currentMode == CalculatorMode.PROGRAMMER && currentDestination.isEmpty(),
                     onClick = { onModeSelected(CalculatorMode.PROGRAMMER) }
                 )
                 DrawerItem(
                     label = "日期计算",
                     icon = { Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    selected = currentMode == CalculatorMode.DATE,
+                    selected = currentMode == CalculatorMode.DATE && currentDestination.isEmpty(),
                     onClick = { onModeSelected(CalculatorMode.DATE) }
+                )
+                DrawerItem(
+                    label = "图形",
+                    icon = {
+                        Text(
+                            text = "ƒ",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    selected = currentDestination == "graphing",
+                    onClick = onNavigateToGraphing
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // === 数学工作台 ===
+                DrawerSectionTitle("数学工作台")
+                DrawerItem(
+                    label = "线性代数",
+                    icon = {
+                        Text(
+                            text = "M",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    selected = currentDestination == "linear_algebra",
+                    onClick = onNavigateToLinearAlgebra
+                )
+                DrawerItem(
+                    label = "微积分",
+                    icon = {
+                        Text(
+                            text = "∫",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    selected = currentDestination == "calculus",
+                    onClick = onNavigateToCalculus
+                )
+                DrawerItem(
+                    label = "微分方程",
+                    icon = {
+                        Text(
+                            text = "∂",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    selected = currentDestination == "differential_equations",
+                    onClick = onNavigateToDifferentialEquations
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))

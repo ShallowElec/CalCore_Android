@@ -38,6 +38,10 @@ class CalculatorViewModel @Inject constructor(
     val animationEvents: SharedFlow<AnimationEvent> = _animationEvents.asSharedFlow()
 
     fun onInput(input: CalculatorInput) {
+        if (_uiState.value.mode == CalculatorMode.PROGRAMMER) {
+            handleProgrammerInput(input)
+            return
+        }
         when (input) {
             is CalculatorInput.Digit -> onDigit(input.value)
             is CalculatorInput.Operator -> onOperator(input.op)
@@ -59,6 +63,18 @@ class CalculatorViewModel @Inject constructor(
         }
     }
 
+    private fun handleProgrammerInput(input: CalculatorInput) {
+        when (input) {
+            is CalculatorInput.Digit -> onProgrammerDigit(input.value)
+            is CalculatorInput.Operator -> onProgrammerOperation(input.op)
+            CalculatorInput.Equals -> onProgrammerEquals()
+            CalculatorInput.Clear -> onProgrammerClear()
+            CalculatorInput.ClearEntry -> onProgrammerClearEntry()
+            CalculatorInput.Backspace -> onProgrammerBackspace()
+            else -> { /* ignore */ }
+        }
+    }
+
     fun onModeChange(mode: CalculatorMode) {
         _uiState.update { it.copy(mode = mode, activeTab = SidePanelTab.NONE) }
     }
@@ -75,14 +91,21 @@ class CalculatorViewModel @Inject constructor(
         _uiState.update { current ->
             val base = current.numberBase
             val radix = base.radix
-            val newValue = try {
-                val digitValue = digit.toInt(radix)
-                current.programmerValue * radix + digitValue
+            val digitValue = try {
+                digit.toInt(radix)
             } catch (_: Exception) {
-                current.programmerValue
+                return@update current
+            }
+            val newValue = if (current.programmerFreshInput) {
+                digitValue.toLong()
+            } else {
+                current.programmerValue * radix + digitValue
             }
             val truncated = current.bitWidth.truncate(newValue)
-            current.copy(programmerValue = truncated)
+            current.copy(
+                programmerValue = truncated,
+                programmerFreshInput = false
+            )
         }
     }
 
@@ -90,24 +113,106 @@ class CalculatorViewModel @Inject constructor(
         _uiState.update { current ->
             val value = current.programmerValue
             val width = current.bitWidth
-            val result = when (op) {
-                "NOT" -> width.truncate(value.inv())
-                "AND" -> width.truncate(value and 0xFFL) // 简化示例
-                "OR" -> width.truncate(value or 0xFFL)
-                "XOR" -> width.truncate(value xor 0xFFL)
-                "Lsh" -> width.truncate(value shl 1)
-                "Rsh" -> width.truncate(value shr 1)
-                else -> value
+            when (op) {
+                "NOT" -> {
+                    // 单目运算：立即执行
+                    val result = width.truncate(value.inv())
+                    _animationEvents.tryEmit(
+                        AnimationEvent.BitOperation(op, value, 0L, result)
+                    )
+                    current.copy(
+                        programmerValue = result,
+                        programmerFreshInput = true,
+                        programmerAccumulator = 0L,
+                        programmerPendingOp = null
+                    )
+                }
+                else -> {
+                    // 双目运算：如果已有 pendingOp，先执行它（链式运算）
+                    val acc = current.programmerAccumulator
+                    val pending = current.programmerPendingOp
+                    val intermediate = if (pending != null) {
+                        val right = if (current.programmerFreshInput) acc else value
+                        computeBitOp(pending, acc, right, width)
+                    } else value
+                    if (pending != null) {
+                        val right = if (current.programmerFreshInput) acc else value
+                        _animationEvents.tryEmit(
+                            AnimationEvent.BitOperation(pending, acc, right, intermediate)
+                        )
+                    }
+                    current.copy(
+                        programmerValue = intermediate,
+                        programmerAccumulator = intermediate,
+                        programmerPendingOp = op,
+                        programmerFreshInput = true
+                    )
+                }
             }
-            _animationEvents.tryEmit(
-                AnimationEvent.BitOperation(op, value, 0xFFL, result)
+        }
+    }
+
+    private fun computeBitOp(op: String, left: Long, right: Long, width: BitWidth): Long {
+        return when (op) {
+            "AND" -> width.truncate(left and right)
+            "OR" -> width.truncate(left or right)
+            "XOR" -> width.truncate(left xor right)
+            "Lsh" -> width.truncate(left shl right.toInt())
+            "Rsh" -> width.truncate(left shr right.toInt())
+            else -> right
+        }
+    }
+
+    fun onProgrammerEquals() {
+        _uiState.update { current ->
+            val acc = current.programmerAccumulator
+            val value = current.programmerValue
+            val width = current.bitWidth
+            val op = current.programmerPendingOp
+            val result = if (op != null) {
+                computeBitOp(op, acc, value, width)
+            } else value
+            if (op != null) {
+                _animationEvents.tryEmit(
+                    AnimationEvent.BitOperation(op, acc, value, result)
+                )
+            }
+            current.copy(
+                programmerValue = result,
+                programmerAccumulator = 0L,
+                programmerPendingOp = null,
+                programmerFreshInput = true
             )
-            current.copy(programmerValue = result)
         }
     }
 
     fun onProgrammerClear() {
-        _uiState.update { it.copy(programmerValue = 0L) }
+        _uiState.update {
+            it.copy(
+                programmerValue = 0L,
+                programmerAccumulator = 0L,
+                programmerPendingOp = null,
+                programmerFreshInput = true
+            )
+        }
+    }
+
+    fun onProgrammerClearEntry() {
+        _uiState.update {
+            it.copy(
+                programmerValue = 0L,
+                programmerFreshInput = true
+            )
+        }
+    }
+
+    fun onProgrammerBackspace() {
+        _uiState.update { current ->
+            val base = current.numberBase
+            val radix = base.radix
+            val newValue = current.programmerValue / radix
+            current.copy(programmerValue = newValue)
+        }
     }
 
     fun onTabChange(tab: SidePanelTab) {
@@ -486,5 +591,8 @@ data class CalculatorUiState(
     val activeTab: SidePanelTab = SidePanelTab.NONE,
     val numberBase: NumberBase = NumberBase.DEC,
     val bitWidth: BitWidth = BitWidth.QWORD,
-    val programmerValue: Long = 0L
+    val programmerValue: Long = 0L,
+    val programmerAccumulator: Long = 0L,
+    val programmerPendingOp: String? = null,
+    val programmerFreshInput: Boolean = true
 )

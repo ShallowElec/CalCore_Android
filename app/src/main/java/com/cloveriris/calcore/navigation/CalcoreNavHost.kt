@@ -7,13 +7,19 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import com.cloveriris.calcore.ui.calculator.CalculatorScreen
+import com.cloveriris.calcore.ui.calculus.CalculusScreen
+import com.cloveriris.calcore.ui.diffeq.DifferentialEquationsScreen
 import com.cloveriris.calcore.ui.graphing.GraphingScreen
+import com.cloveriris.calcore.ui.linearalgebra.LinearAlgebraScreen
 import com.cloveriris.calcore.ui.settings.SettingsScreen
 import com.cloveriris.calcore.ui.theme.AppTheme
 
 object CalcoreDestinations {
     const val CALCULATOR = "calculator"
     const val GRAPHING = "graphing"
+    const val LINEAR_ALGEBRA = "linear_algebra"
+    const val CALCULUS = "calculus"
+    const val DIFFERENTIAL_EQUATIONS = "differential_equations"
     const val SETTINGS = "settings"
 }
 
@@ -36,6 +42,15 @@ fun CalcoreNavHost(
                 onNavigateToGraphing = {
                     navController.navigate(CalcoreDestinations.GRAPHING)
                 },
+                onNavigateToLinearAlgebra = {
+                    navController.navigate(CalcoreDestinations.LINEAR_ALGEBRA)
+                },
+                onNavigateToCalculus = {
+                    navController.navigate(CalcoreDestinations.CALCULUS)
+                },
+                onNavigateToDifferentialEquations = {
+                    navController.navigate(CalcoreDestinations.DIFFERENTIAL_EQUATIONS)
+                },
                 onNavigateToSettings = {
                     navController.navigate(CalcoreDestinations.SETTINGS)
                 }
@@ -43,6 +58,21 @@ fun CalcoreNavHost(
         }
         composable(CalcoreDestinations.GRAPHING) {
             GraphingScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(CalcoreDestinations.LINEAR_ALGEBRA) {
+            LinearAlgebraScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(CalcoreDestinations.CALCULUS) {
+            CalculusScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(CalcoreDestinations.DIFFERENTIAL_EQUATIONS) {
+            DifferentialEquationsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
