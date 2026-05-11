@@ -5,6 +5,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import com.cloveriris.calcore.ui.calculator.CalculatorScreen
 import com.cloveriris.calcore.ui.graphing.GraphingScreen
 import com.cloveriris.calcore.ui.settings.SettingsScreen
@@ -20,6 +21,7 @@ object CalcoreDestinations {
 fun CalcoreNavHost(
     navController: NavHostController,
     currentTheme: AppTheme = AppTheme.SYSTEM_DYNAMIC,
+    windowWidthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.Compact,
     onThemeChange: (AppTheme) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -30,6 +32,7 @@ fun CalcoreNavHost(
     ) {
         composable(CalcoreDestinations.CALCULATOR) {
             CalculatorScreen(
+                windowWidthSizeClass = windowWidthSizeClass,
                 onNavigateToGraphing = {
                     navController.navigate(CalcoreDestinations.GRAPHING)
                 },

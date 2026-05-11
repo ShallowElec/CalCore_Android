@@ -7,6 +7,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -27,12 +30,14 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var themeDataStore: ThemeDataStore
 
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             val appTheme by themeDataStore.appTheme.collectAsState(initial = AppTheme.SYSTEM_DYNAMIC)
             val scope = rememberCoroutineScope()
+            val windowSizeClass = calculateWindowSizeClass(this)
 
             CalcoreTheme(appTheme = appTheme) {
                 Surface(
@@ -41,6 +46,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     CalcoreApp(
                         currentTheme = appTheme,
+                        windowWidthSizeClass = windowSizeClass.widthSizeClass,
                         onThemeChange = { theme ->
                             scope.launch {
                                 themeDataStore.setAppTheme(theme)
@@ -56,12 +62,14 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CalcoreApp(
     currentTheme: AppTheme = AppTheme.SYSTEM_DYNAMIC,
+    windowWidthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.Compact,
     onThemeChange: (AppTheme) -> Unit = {}
 ) {
     val navController = rememberNavController()
     CalcoreNavHost(
         navController = navController,
         currentTheme = currentTheme,
+        windowWidthSizeClass = windowWidthSizeClass,
         onThemeChange = onThemeChange
     )
 }
