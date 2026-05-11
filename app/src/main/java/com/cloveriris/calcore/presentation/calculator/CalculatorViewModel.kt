@@ -3,12 +3,14 @@ package com.cloveriris.calcore.presentation.calculator
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cloveriris.calcore.domain.model.AnimationEvent
+import com.cloveriris.calcore.domain.model.BitWidth
 import com.cloveriris.calcore.domain.model.CalculatorInput
 import com.cloveriris.calcore.domain.model.CalculatorMode
 import com.cloveriris.calcore.domain.model.CalculatorState
 import com.cloveriris.calcore.domain.model.HistoryEntry
 import com.cloveriris.calcore.domain.model.MemoryOpType
 import com.cloveriris.calcore.domain.model.MemoryState
+import com.cloveriris.calcore.domain.model.NumberBase
 import com.cloveriris.calcore.domain.model.SidePanelTab
 import com.cloveriris.calcore.domain.usecase.EvaluateUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -59,6 +61,50 @@ class CalculatorViewModel @Inject constructor(
 
     fun onModeChange(mode: CalculatorMode) {
         _uiState.update { it.copy(mode = mode, activeTab = SidePanelTab.NONE) }
+    }
+
+    fun onBaseChange(base: NumberBase) {
+        _uiState.update { it.copy(numberBase = base) }
+    }
+
+    fun onBitWidthChange(width: BitWidth) {
+        _uiState.update { it.copy(bitWidth = width) }
+    }
+
+    fun onProgrammerDigit(digit: String) {
+        _uiState.update { current ->
+            val base = current.numberBase
+            val radix = base.radix
+            val newValue = try {
+                val digitValue = digit.toInt(radix)
+                current.programmerValue * radix + digitValue
+            } catch (_: Exception) {
+                current.programmerValue
+            }
+            val truncated = current.bitWidth.truncate(newValue)
+            current.copy(programmerValue = truncated)
+        }
+    }
+
+    fun onProgrammerOperation(op: String) {
+        _uiState.update { current ->
+            val value = current.programmerValue
+            val width = current.bitWidth
+            val result = when (op) {
+                "NOT" -> width.truncate(value.inv())
+                "AND" -> value // 简化：二元运算需要操作数栈
+                "OR" -> value
+                "XOR" -> value
+                "Lsh" -> width.truncate(value shl 1)
+                "Rsh" -> width.truncate(value shr 1)
+                else -> value
+            }
+            current.copy(programmerValue = result)
+        }
+    }
+
+    fun onProgrammerClear() {
+        _uiState.update { it.copy(programmerValue = 0L) }
     }
 
     fun onTabChange(tab: SidePanelTab) {
@@ -431,5 +477,8 @@ data class CalculatorUiState(
     val state: CalculatorState = CalculatorState.Idle(),
     val memory: MemoryState = MemoryState(),
     val history: List<HistoryEntry> = emptyList(),
-    val activeTab: SidePanelTab = SidePanelTab.NONE
+    val activeTab: SidePanelTab = SidePanelTab.NONE,
+    val numberBase: NumberBase = NumberBase.DEC,
+    val bitWidth: BitWidth = BitWidth.QWORD,
+    val programmerValue: Long = 0L
 )

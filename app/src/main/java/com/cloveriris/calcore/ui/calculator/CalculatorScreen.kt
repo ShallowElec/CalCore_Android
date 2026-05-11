@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import com.cloveriris.calcore.domain.model.CalculatorInput
 import com.cloveriris.calcore.domain.model.CalculatorMode
+import com.cloveriris.calcore.domain.model.NumberBase
 import com.cloveriris.calcore.domain.model.SidePanelTab
 import com.cloveriris.calcore.presentation.calculator.CalculatorUiState
 import com.cloveriris.calcore.presentation.calculator.CalculatorViewModel
@@ -57,6 +58,7 @@ import com.cloveriris.calcore.ui.components.CalcoreDisplay
 import com.cloveriris.calcore.ui.components.DrawerMenu
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
 import com.cloveriris.calcore.ui.theme.TerminalBackground
+import com.cloveriris.calcore.ui.visualization.AstTreeView
 import com.cloveriris.calcore.ui.visualization.BottomControlBar
 import com.cloveriris.calcore.ui.visualization.VisualizationStage
 import kotlinx.coroutines.launch
@@ -114,6 +116,8 @@ fun CalculatorScreen(
                     onClearHistory = viewModel::clearHistory,
                     onOpenDrawer = { scope.launch { drawerState.open() } },
                     onToggleVisPanel = { visualizationViewModel.setPanelExpanded(!visState.isPanelExpanded) },
+                    onBaseChange = viewModel::onBaseChange,
+                    onBitWidthChange = viewModel::onBitWidthChange,
                     modifier = Modifier.padding(innerPadding)
                 )
             } else {
@@ -126,6 +130,8 @@ fun CalculatorScreen(
                     onClearHistory = viewModel::clearHistory,
                     onOpenDrawer = { scope.launch { drawerState.open() } },
                     onToggleVisPanel = { visualizationViewModel.setPanelExpanded(!visState.isPanelExpanded) },
+                    onBaseChange = viewModel::onBaseChange,
+                    onBitWidthChange = viewModel::onBitWidthChange,
                     modifier = Modifier.padding(innerPadding)
                 )
             }
@@ -145,6 +151,8 @@ private fun PortraitLayout(
     onClearHistory: () -> Unit,
     onOpenDrawer: () -> Unit,
     onToggleVisPanel: () -> Unit,
+    onBaseChange: (NumberBase) -> Unit,
+    onBitWidthChange: (com.cloveriris.calcore.domain.model.BitWidth) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -167,13 +175,24 @@ private fun PortraitLayout(
         }
 
         // 显示区
-        CalcoreDisplay(
-            expression = uiState.state.displayExpression,
-            result = uiState.state.displayResult,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(0.8f)
-        )
+        if (uiState.mode == CalculatorMode.PROGRAMMER) {
+            ProgrammerDisplay(
+                value = uiState.programmerValue,
+                base = uiState.numberBase,
+                bitWidth = uiState.bitWidth,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.8f)
+            )
+        } else {
+            CalcoreDisplay(
+                expression = uiState.state.displayExpression,
+                result = uiState.state.displayResult,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.8f)
+            )
+        }
 
         // 内容区：按键 / 历史 / 内存 / 可视化
         when (uiState.activeTab) {
@@ -204,6 +223,15 @@ private fun PortraitLayout(
                 when (uiState.mode) {
                     CalculatorMode.SCIENTIFIC -> ScientificKeypad(
                         onInput = onInput,
+                        hasMemory = uiState.memory.hasValue,
+                        modifier = keypadModifier
+                    )
+                    CalculatorMode.PROGRAMMER -> ProgrammerKeypad(
+                        currentBase = uiState.numberBase,
+                        currentBitWidth = uiState.bitWidth,
+                        onInput = onInput,
+                        onBaseChange = onBaseChange,
+                        onBitWidthChange = onBitWidthChange,
                         hasMemory = uiState.memory.hasValue,
                         modifier = keypadModifier
                     )
@@ -254,6 +282,8 @@ private fun LandscapeLayout(
     onClearHistory: () -> Unit,
     onOpenDrawer: () -> Unit,
     onToggleVisPanel: () -> Unit,
+    onBaseChange: (NumberBase) -> Unit,
+    onBitWidthChange: (com.cloveriris.calcore.domain.model.BitWidth) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var isRightExpanded by remember { mutableStateOf(false) }
@@ -284,13 +314,24 @@ private fun LandscapeLayout(
                     onOpenDrawer = onOpenDrawer
                 )
 
-                CalcoreDisplay(
-                    expression = uiState.state.displayExpression,
-                    result = uiState.state.displayResult,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.5f)
-                )
+                if (uiState.mode == CalculatorMode.PROGRAMMER) {
+                    ProgrammerDisplay(
+                        value = uiState.programmerValue,
+                        base = uiState.numberBase,
+                        bitWidth = uiState.bitWidth,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(0.5f)
+                    )
+                } else {
+                    CalcoreDisplay(
+                        expression = uiState.state.displayExpression,
+                        result = uiState.state.displayResult,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(0.5f)
+                    )
+                }
 
                 // 横屏时左侧也显示历史/内存小面板（可切换）
                 when (uiState.activeTab) {
@@ -321,6 +362,15 @@ private fun LandscapeLayout(
                 when (uiState.mode) {
                     CalculatorMode.SCIENTIFIC -> ScientificKeypad(
                         onInput = onInput,
+                        hasMemory = uiState.memory.hasValue,
+                        modifier = keypadModifier
+                    )
+                    CalculatorMode.PROGRAMMER -> ProgrammerKeypad(
+                        currentBase = uiState.numberBase,
+                        currentBitWidth = uiState.bitWidth,
+                        onInput = onInput,
+                        onBaseChange = onBaseChange,
+                        onBitWidthChange = onBitWidthChange,
                         hasMemory = uiState.memory.hasValue,
                         modifier = keypadModifier
                     )
@@ -463,6 +513,54 @@ private fun CalculatorHeader(
                 }
             }
         }
+    }
+}
+
+// ==================== 程序员模式显示区 ====================
+
+@Composable
+private fun ProgrammerDisplay(
+    value: Long,
+    base: NumberBase,
+    bitWidth: com.cloveriris.calcore.domain.model.BitWidth,
+    modifier: Modifier = Modifier
+) {
+    val displayValue = when (base) {
+        NumberBase.BIN -> "${base.prefix}${java.lang.Long.toBinaryString(value)}"
+        NumberBase.OCT -> "${base.prefix}${java.lang.Long.toOctalString(value)}"
+        NumberBase.DEC -> value.toString()
+        NumberBase.HEX -> "${base.prefix}${java.lang.Long.toHexString(value).uppercase()}"
+    }
+    val secondaryInfo = "${bitWidth.bits}-bit | ${NumberBase.HEX.prefix}${java.lang.Long.toHexString(value).uppercase().padStart(bitWidth.bits / 4, '0')}"
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.Bottom
+    ) {
+        Text(
+            text = secondaryInfo,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            maxLines = 1
+        )
+        androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = displayValue,
+            style = MaterialTheme.typography.displayLarge.copy(
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                fontSize = 40.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            ),
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            maxLines = 1
+        )
     }
 }
 
