@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.cloveriris.calcore.domain.model.CalculatorInput
 import com.cloveriris.calcore.domain.model.CalculatorMode
 import com.cloveriris.calcore.domain.model.CalculatorState
+import com.cloveriris.calcore.domain.model.HistoryEntry
 import com.cloveriris.calcore.domain.model.MemoryState
+import com.cloveriris.calcore.domain.model.SidePanelTab
 import com.cloveriris.calcore.domain.usecase.EvaluateUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,7 +50,28 @@ class CalculatorViewModel @Inject constructor(
     }
 
     fun onModeChange(mode: CalculatorMode) {
-        _uiState.update { it.copy(mode = mode) }
+        _uiState.update { it.copy(mode = mode, activeTab = SidePanelTab.NONE) }
+    }
+
+    fun onTabChange(tab: SidePanelTab) {
+        _uiState.update { it.copy(activeTab = tab) }
+    }
+
+    fun dismissPanel() {
+        _uiState.update { it.copy(activeTab = SidePanelTab.NONE) }
+    }
+
+    fun clearHistory() {
+        _uiState.update { it.copy(history = emptyList()) }
+    }
+
+    fun recallHistory(entry: HistoryEntry) {
+        _uiState.update {
+            it.copy(
+                state = CalculatorState.Inputting(entry.result),
+                activeTab = SidePanelTab.NONE
+            )
+        }
     }
 
     private fun onDigit(digit: String) {
@@ -137,11 +160,20 @@ class CalculatorViewModel @Inject constructor(
                         onSuccess = ::formatResult,
                         onFailure = { "Error" }
                     )
+                    val newHistory = if (result.isSuccess) {
+                        listOf(
+                            HistoryEntry(
+                                expression = state.displayExpression,
+                                result = resultStr
+                            )
+                        ) + current.history
+                    } else current.history
                     current.copy(
                         state = CalculatorState.Evaluated(
                             displayExpression = state.displayExpression,
                             displayResult = resultStr
-                        )
+                        ),
+                        history = newHistory.take(50)
                     )
                 }
                 else -> current
@@ -368,5 +400,7 @@ class CalculatorViewModel @Inject constructor(
 data class CalculatorUiState(
     val mode: CalculatorMode = CalculatorMode.STANDARD,
     val state: CalculatorState = CalculatorState.Idle(),
-    val memory: MemoryState = MemoryState()
+    val memory: MemoryState = MemoryState(),
+    val history: List<HistoryEntry> = emptyList(),
+    val activeTab: SidePanelTab = SidePanelTab.NONE
 )
