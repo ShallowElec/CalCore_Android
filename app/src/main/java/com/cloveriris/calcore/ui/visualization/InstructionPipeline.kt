@@ -32,10 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.presentation.visualization.PipelineStageVisual
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.TerminalBackground
-import com.cloveriris.calcore.ui.theme.TerminalGray
-import com.cloveriris.calcore.ui.theme.TerminalGreen
-import com.cloveriris.calcore.ui.theme.TerminalAmber
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * L7 指令流水线可视化（专业时序图风格）
@@ -51,6 +48,7 @@ fun InstructionPipeline(
     stages: List<PipelineStageVisual>,
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     val stageOrder = listOf("FETCH", "DECODE", "EXECUTE", "WRITEBACK")
     val grouped = stages.groupBy { it.stageName }
     val infiniteTransition = rememberInfiniteTransition(label = "pipe-flow")
@@ -67,12 +65,12 @@ fun InstructionPipeline(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(TerminalBackground)
+            .background(viz.stageBg)
             .padding(12.dp)
     ) {
         Text(
             text = "L7: INSTRUCTION PIPELINE",
-            color = TerminalGray,
+            color = viz.textMuted,
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
             letterSpacing = 2.sp,
@@ -98,7 +96,7 @@ fun InstructionPipeline(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                if (hasActive) TerminalGreen.copy(alpha = 0.15f) else Color(0xFF1A1A1A),
+                                if (hasActive) viz.dataPrimary.copy(alpha = 0.15f) else viz.surface,
                                 RoundedCornerShape(4.dp)
                             )
                             .padding(vertical = 3.dp, horizontal = 4.dp),
@@ -106,7 +104,7 @@ fun InstructionPipeline(
                     ) {
                         Text(
                             text = stageName,
-                            color = if (hasActive) TerminalGreen else TerminalGray.copy(alpha = 0.5f),
+                            color = if (hasActive) viz.dataPrimary else viz.textMuted.copy(alpha = 0.5f),
                             fontSize = 9.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = if (hasActive) FontWeight.Bold else FontWeight.Normal
@@ -145,7 +143,7 @@ fun InstructionPipeline(
                         Canvas(modifier = Modifier.fillMaxWidth().height(12.dp)) {
                             // 基线
                             drawLine(
-                                color = TerminalGreen.copy(alpha = arrowAlpha * 0.4f),
+                                color = viz.dataPrimary.copy(alpha = arrowAlpha * 0.4f),
                                 start = Offset(0f, size.height / 2),
                                 end = Offset(size.width - 4.dp.toPx(), size.height / 2),
                                 strokeWidth = 1.5f.dp.toPx()
@@ -154,13 +152,13 @@ fun InstructionPipeline(
                             val tipX = size.width - 4.dp.toPx()
                             val cy = size.height / 2
                             drawLine(
-                                color = TerminalGreen.copy(alpha = arrowAlpha),
+                                color = viz.dataPrimary.copy(alpha = arrowAlpha),
                                 start = Offset(tipX - 4.dp.toPx(), cy - 3.dp.toPx()),
                                 end = Offset(tipX, cy),
                                 strokeWidth = 1.5f.dp.toPx()
                             )
                             drawLine(
-                                color = TerminalGreen.copy(alpha = arrowAlpha),
+                                color = viz.dataPrimary.copy(alpha = arrowAlpha),
                                 start = Offset(tipX - 4.dp.toPx(), cy + 3.dp.toPx()),
                                 end = Offset(tipX, cy),
                                 strokeWidth = 1.5f.dp.toPx()
@@ -193,9 +191,9 @@ fun InstructionPipeline(
                     drawRect(
                         brush = Brush.horizontalGradient(
                             colors = listOf(
-                                TerminalGreen.copy(alpha = 0.3f),
-                                TerminalGreen.copy(alpha = 0.9f),
-                                TerminalGreen.copy(alpha = 0.3f)
+                                viz.dataPrimary.copy(alpha = 0.3f),
+                                viz.dataPrimary.copy(alpha = 0.9f),
+                                viz.dataPrimary.copy(alpha = 0.3f)
                             )
                         ),
                         size = androidx.compose.ui.geometry.Size(size.width * activeProgress, size.height)
@@ -212,6 +210,7 @@ private fun PipelineSlot(
     isActive: Boolean,
     progress: Float
 ) {
+    val viz = LocalVisualizationColors.current
     val infiniteTransition = rememberInfiniteTransition(label = "slot-pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 0.6f,
@@ -228,8 +227,8 @@ private fun PipelineSlot(
             .fillMaxWidth()
             .background(
                 when {
-                    isActive -> TerminalGreen.copy(alpha = pulseAlpha * 0.85f)
-                    instruction.isNotEmpty() -> Color(0xFF1F1F1F)
+                    isActive -> viz.dataPrimary.copy(alpha = pulseAlpha * 0.85f)
+                    instruction.isNotEmpty() -> viz.surface
                     else -> Color(0xFF111111)
                 },
                 RoundedCornerShape(3.dp)
@@ -241,8 +240,8 @@ private fun PipelineSlot(
             text = instruction.ifEmpty { "·" },
             color = when {
                 isActive -> Color.Black
-                instruction.isNotEmpty() -> TerminalGray.copy(alpha = 0.7f)
-                else -> TerminalGray.copy(alpha = 0.25f)
+                instruction.isNotEmpty() -> viz.textMuted.copy(alpha = 0.7f)
+                else -> viz.textMuted.copy(alpha = 0.25f)
             },
             fontSize = 10.sp,
             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,

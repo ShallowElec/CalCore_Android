@@ -10,9 +10,9 @@
 **Calcore** 是一款面向开发者、CS 教育者、数学研究者的高级可视化计算器。
 核心差异化：**每一次用户交互都会实时展开底层原理动画**（从布尔代数、寄存器、内存布局到 AST 求值链路）。
 
-- **Slogan**: "See the math. See the machine."
+- **Slogan**: "See the light through the machine."
 - **平台策略**: 平台无关核心引擎 + 原生 UI 层（Android 为首）。
-- **当前阶段**: M1-M7a 已完成实现，M7b-M9 待开发。
+- **当前阶段**: 菱形穿透 v3.0 修订中。M1-M5 为当前冲刺目标（菱形骨架→△下行→▽上行→架构滤镜→交互抛光）；图形/数学工作台在菱形核心稳定后以 v3.1/v3.2 推进。
 
 ---
 
@@ -148,7 +148,7 @@ class ThemeDataStore @Inject constructor(
 │  - 高精度 64-bit 计算引擎                │
 │  - 表达式解析器 (Lexer/Parser)           │
 │  - 图形采样引擎（2D/3D）                 │
-│  - 动画指令序列生成器                     │
+│  - 菱形管道脚本生成器 (DiamondEngine)      │
 ├─────────────────────────────────────────┤
 │  Platform Layer (Android 原生)           │
 │  - OpenGL ES 渲染器                      │
@@ -162,7 +162,7 @@ class ThemeDataStore @Inject constructor(
 - **UI State**: 使用 `StateFlow` + `data class` 描述完整 UI 状态，遵循 **MVI 单向数据流**。
 - **计算器状态机**: 按键输入 → 表达式构建 → 求值触发 → 结果回显 → 动画播放，每步均为不可变状态快照。
 - **图形视口状态**: 相机位置、缩放、旋转角度用 `Animatable` 包裹，支持手势插值。
-- **动画时间轴**: 独立 `AnimationViewModel`，管理播放/暂停/ scrubber / 速度倍率，与计算逻辑解耦。
+- **动画时间轴**: 独立 `DiamondViewModel`，管理菱形管道的播放/暂停/ scrubber / 速度倍率，与计算逻辑解耦。
 
 ---
 
@@ -178,7 +178,7 @@ com.cloveriris.calcore
 │   ├── components         # 可复用 Compose 组件
 │   ├── calculator         # 计算器模式屏幕
 │   ├── graphing           # 图形模式屏幕
-│   ├── visualization      # 可视化舞台（Canvas / OpenGL）
+│   ├── diamond            # 菱形穿透舞台（Canvas）
 │   └── settings           # 设置屏幕
 ├── presentation           # ViewModel
 ├── domain                 # 领域模型、接口
@@ -200,7 +200,7 @@ com.cloveriris.calcore
   - 使用 `rememberTextMeasurer()` 缓存文本测量器，避免每帧重建。
   - 滑动/生长动画优先使用 `Animatable` 在 `DrawScope` 内插值，而非触发 Compose 重组。
   - 需要裁剪的 Canvas 必须加 `.clipToBounds()`，防止绘制溢出到相邻 UI。
-  - 复杂动画组件（如 `LinkedListView`）使用独立 Canvas Overlay 层，与基础 UI 分离以减少重组范围。
+  - 复杂动画组件（如 `AsmCard`、`BitGrid`）使用独立 Canvas Overlay 层，与基础 UI 分离以减少重组范围。
 
 ### 4.3 颜色与主题
 
@@ -222,25 +222,27 @@ com.cloveriris.calcore
 | 2026-05-12 | OpenGL ES 3.2 | 3D 图形 60 FPS 必需 | Vulkan / AGSL only | GLES 为主，AGSL 增强 |
 | 2026-05-12 | MVI 单向流 | 计算器状态复杂，需可预测 | MVVM 双向绑定 | MVI |
 | 2026-05-12 | Compose Canvas 2D | 2D 可视化与 UI 同层，降低复杂度 | Skia 原生 / OpenGL 全量 | Canvas 2D + GLES 3D |
-| 2026-05-12 | 可视化引擎 `AnimationScript` | 需要按时间回放、可 scrub 的动画系统 | 每帧直接修改状态 | `TimedAction` + `reduceAction` 累积式状态归约 |
-| 2026-05-12 | Architecture 丰富模型 | 多架构切换需要栈方向、SP 名、寻址方式、助记符差异 | 仅寄存器名不同 | 完整 Architecture enum（SP/FP/addressingMode/mnemonic） |
-| 2026-05-12 | 动画速度 200ms/tick | PRD 要求 0.2s 基准，可配置 0.2x~2.0x | 固定 40 步硬编码 | `baseStepIntervalMs=200L` + `playbackSpeed` 乘数 |
+| 2026-05-13 | **菱形穿透心智模型** | 需要将底层可视化凝聚为统一的"符号→硅→符号"旅程 | 保留 v2.0 的分散 L1-L8 层级面板 | 采用中心对称菱形网格，△ 下行 + ALU 核心 + ▽ 上行 |
+| 2026-05-13 | **严格镜像对称管道** | △ 与 ▽ 必须在动画、状态、时间轴上保持可逆 | 上下独立实现，允许视觉差异 | `DiamondEngine` 成对定义 Action，共用几何参数与缓动函数 |
+| 2026-05-13 | **方块语义系统** | 需要统一两种几何元素表达所有层级 | 每层使用不同形状/颜色 | 全局仅使用「绿色实心方块」（数据实体）与「绿色空心方块」（容器/槽位/指针） |
+| 2026-05-13 | **架构滤镜（ASM 层）** | 多架构差异应集中在 L3/L3'，上下层保持不动 | 每层都根据架构变化 | 仅 ASM 卡片层应用纹理滤镜与助记符差异，BIN/HEX/ASCII 层数值严格一致 |
+| 2026-05-13 | **垂直时间轴 Diamond Scrubber** | 用户需要在任意层级间自由穿梭查看状态 | 水平底部 scrubber | 沿菱形中轴线放置垂直 scrubber，支持在 △ 任意层级与 ▽ 任意层级间拖动 |
+| 2026-05-13 | **输入探针与删除逆向瀑布** | 光标移动和退格需要精确追踪并逆向回收已传播方块 | 仅顶层文本变动，可视化不回收 | 为每个输入字符分配 `BlockId`，退格时按 ID 沿原路径精确吸回 |
+| 2026-05-12 | 动画速度 200ms/tick | PRD 要求 0.2s 基准，可配置 0.2x~2.0x | 固定 40 步硬编码 | `baseStepIntervalMs=200L` + `playbackSpeed` 乘数（v3.0 扩展为 0.25x~4.0x） |
 
 ---
 
-## 6. 里程碑对接 (PRD M1-M9)
+## 6. 里程碑对接 (PRD v2.1 菱形穿透)
 
 | 里程碑 | Android 端重点 | 状态 |
 |---|---|---|
-| M1 内核 | 引擎 Kotlin 实现（Lexer/Parser/AST/Evaluator、64-bit 计算） | ✅ 完成 |
-| M2 骨架 | Canvas 方块系统、连线系统、基础时间轴控件 | ✅ 完成 |
-| M3 链路 | 按键 → 内存 → ALU → 结果的 Compose Canvas 动画（L1-L8） | ✅ 完成 |
-| M4 硬核 | 程序员模式 + 架构切换 UI + 位运算可视化 + 动画速度控制 | ✅ 完成 |
-| M5 图形基座 | 2D 坐标系 Canvas、表达式列表、显函数/参数/极坐标渲染 | ✅ 完成 |
-| M6 图形进阶 | OpenGL ES 3D 渲染器、参数曲面、隐函数 | ⏳ M6a 完成（矩阵/微积分骨架），M6b 3D 待实现 |
-| M7 计算可视化 | AST 生长动画、采样过程 Canvas 演示、ODE 求解可视化 | ✅ M7a 完成（ODE 工作台），M7b PDE 待实现 |
-| M8 参数动画 | 滑块系统、关键帧、视频导出 (MediaCodec) | ⏳ 待实现 |
-| M9 抛光 | 性能调优、Material You 动态色精细化、无障碍 | ⏳ 待实现 |
+| **M1** | 菱形骨架引擎：中心对称菱形网格、方块系统、通道壁、ALU 核心节点 | 🔄 进行中 |
+| **M2** | △ 下行链路：ASCII→HEX→ASM→BIN→Stack→ALU 的七层动画与数据流 | ⏳ 待实现 |
+| **M3** | ▽ 上行链路：严格的镜像反转链路，实现菱形闭合 | ⏳ 待实现 |
+| **M4** | 架构滤镜：X64 / RV64 / ARM64 的 ASM 层纹理切换与指令差异 | ⏳ 待实现 |
+| **M5** | 交互抛光：输入探针、时间轴 scrubber、光标同步、删除逆向瀑布、3B1B 级缓动质感 | ⏳ 待实现 |
+
+> **后续规划**：图形基座（2D/3D 坐标系）、线性代数工作台、微积分可视化、ODE/PDE 求解等 v2.0 内容将在菱形穿透核心（M1-M5）稳定后以 **v3.1/v3.2** 继续推进。图形与数学工作台渲染层独立于菱形舞台，不受影响。
 
 ---
 
@@ -250,10 +252,11 @@ com.cloveriris.calcore
 2. **最小侵入**: 优先扩展现有组件，而非重写；删除代码需说明替代方案。
 3. **性能敏感代码标注**: 任何涉及 `Canvas draw`、`OpenGL render loop`、`Coroutine` 的代码需附性能注释。
 4. **主题一致性**: 新增 UI 组件必须明确使用哪个 Material Theme Token，禁止自行发明颜色。
-5. **文档同步**: 修改架构后同步更新本文件。
+5. **菱形对称性**: 任何涉及 △ 下行的 Action/动画/状态变更，必须同时定义其 ▽ 上行的镜像版本，并在 `DiamondEngine` 中成对注册。
+6. **文档同步**: 修改架构后同步更新本文件。
 
 ---
 
-*文档版本: v1.1*  
-*日期: 2026-05-12*  
-*状态: M1-M7a 实现完成，M7b-M9 待开发*
+*文档版本: v1.2*  
+*日期: 2026-05-13*  
+*状态: 菱形穿透 v3.0 修订中，M1 进行中，M2-M5 待实现*

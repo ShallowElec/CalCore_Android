@@ -25,10 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.presentation.visualization.AddressBusVisual
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.TerminalBackground
-import com.cloveriris.calcore.ui.theme.TerminalGray
-import com.cloveriris.calcore.ui.theme.TerminalGreen
-import com.cloveriris.calcore.ui.theme.TerminalGridLine
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * 地址总线可视化（L6: Address Bus）
@@ -40,16 +37,17 @@ fun AddressBusView(
     addressBus: AddressBusVisual?,
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     val textMeasurer = rememberTextMeasurer()
 
     Column(
         modifier = modifier
-            .background(TerminalBackground)
+            .background(viz.stageBg)
             .padding(8.dp)
     ) {
         Text(
             text = "L6: ADDRESS BUS",
-            color = TerminalGray,
+            color = viz.textMuted,
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
             modifier = Modifier.padding(bottom = 8.dp)
@@ -79,24 +77,24 @@ fun AddressBusView(
             // Segment 方块（左上）
             val segX = startX
             val segY = centerY - boxHeight - 6.dp.toPx()
-            drawAddressBox(segX, segY, boxWidth, boxHeight, "SEG", segHex, isHighlighted, textMeasurer)
+            drawAddressBox(segX, segY, boxWidth, boxHeight, "SEG", segHex, isHighlighted, textMeasurer, viz)
 
             // Offset 方块（左下）
             val offX = startX
             val offY = centerY + 6.dp.toPx()
-            drawAddressBox(offX, offY, boxWidth, boxHeight, "OFF", offHex, isHighlighted, textMeasurer)
+            drawAddressBox(offX, offY, boxWidth, boxHeight, "OFF", offHex, isHighlighted, textMeasurer, viz)
 
             // ALU 方块（中）
             val aluX = startX + boxWidth + midGap
             val aluY = centerY - boxHeight / 2
-            val aluBg = if (isHighlighted) TerminalGreen.copy(alpha = 0.25f) else Color(0xFF1F1F1F)
+            val aluBg = if (isHighlighted) viz.dataPrimary.copy(alpha = 0.25f) else viz.surface
             drawRect(
                 color = aluBg,
                 topLeft = Offset(aluX, aluY),
                 size = Size(boxWidth, boxHeight)
             )
             drawRect(
-                color = if (isHighlighted) TerminalGreen else TerminalGray,
+                color = if (isHighlighted) viz.dataPrimary else viz.textMuted,
                 topLeft = Offset(aluX, aluY),
                 size = Size(boxWidth, boxHeight),
                 style = Stroke(width = 2.dp.toPx())
@@ -104,7 +102,7 @@ fun AddressBusView(
             val aluTextLayout = textMeasurer.measure(
                 "ALU",
                 TextStyle(
-                    color = if (isHighlighted) TerminalGreen else TerminalGray,
+                    color = if (isHighlighted) viz.dataPrimary else viz.textMuted,
                     fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace
                 )
@@ -120,24 +118,24 @@ fun AddressBusView(
             // Full Address 方块（右）
             val fullX = aluX + boxWidth + midGap
             val fullY = centerY - boxHeight / 2
-            val fullBg = if (isHighlighted) TerminalGreen.copy(alpha = 0.15f) else Color(0xFF1F1F1F)
-            drawAddressBox(fullX, fullY, boxWidth, boxHeight, "ADDR", fullHex, isHighlighted, textMeasurer, overrideBg = fullBg)
+            val fullBg = if (isHighlighted) viz.dataPrimary.copy(alpha = 0.15f) else viz.surface
+            drawAddressBox(fullX, fullY, boxWidth, boxHeight, "ADDR", fullHex, isHighlighted, textMeasurer, viz, overrideBg = fullBg)
 
             // 流光：Segment → ALU
             val segCenterRight = Offset(segX + boxWidth, segY + boxHeight / 2)
             val aluLeftTop = Offset(aluX, aluY + boxHeight * 0.35f)
-            drawBusFlowCurve(segCenterRight, aluLeftTop, progress)
+            drawBusFlowCurve(segCenterRight, aluLeftTop, progress, viz)
 
             // 流光：Offset → ALU
             val offCenterRight = Offset(offX + boxWidth, offY + boxHeight / 2)
             val aluLeftBot = Offset(aluX, aluY + boxHeight * 0.65f)
-            drawBusFlowCurve(offCenterRight, aluLeftBot, progress)
+            drawBusFlowCurve(offCenterRight, aluLeftBot, progress, viz)
 
             // 流光：ALU → Full Address（progress 0.5~1.0）
             val aluCenterRight = Offset(aluX + boxWidth, aluY + boxHeight / 2)
             val fullLeftCenter = Offset(fullX, fullY + boxHeight / 2)
             val rightProgress = ((progress - 0.5f) * 2f).coerceIn(0f, 1f)
-            drawBusFlowCurve(aluCenterRight, fullLeftCenter, rightProgress)
+            drawBusFlowCurve(aluCenterRight, fullLeftCenter, rightProgress, viz)
         }
     }
 }
@@ -151,16 +149,17 @@ private fun DrawScope.drawAddressBox(
     value: String,
     highlighted: Boolean,
     textMeasurer: TextMeasurer,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme,
     overrideBg: Color? = null
 ) {
-    val bg = overrideBg ?: Color(0xFF1F1F1F)
+    val bg = overrideBg ?: viz.surface
     drawRect(
         color = bg,
         topLeft = Offset(x, y),
         size = Size(width, height)
     )
     drawRect(
-        color = if (highlighted) TerminalGreen.copy(alpha = 0.45f) else TerminalGridLine,
+        color = if (highlighted) viz.dataPrimary.copy(alpha = 0.45f) else viz.gridLine,
         topLeft = Offset(x, y),
         size = Size(width, height),
         style = Stroke(width = 1.dp.toPx())
@@ -168,7 +167,7 @@ private fun DrawScope.drawAddressBox(
     val labelLayout = textMeasurer.measure(
         label,
         TextStyle(
-            color = TerminalGray,
+            color = viz.textMuted,
             fontSize = 8.sp,
             fontFamily = FontFamily.Monospace
         )
@@ -180,7 +179,7 @@ private fun DrawScope.drawAddressBox(
     val valueLayout = textMeasurer.measure(
         value,
         TextStyle(
-            color = TerminalGreen,
+            color = viz.dataPrimary,
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace
         )
@@ -197,7 +196,8 @@ private fun DrawScope.drawAddressBox(
 private fun DrawScope.drawBusFlowCurve(
     start: Offset,
     end: Offset,
-    progress: Float
+    progress: Float,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme
 ) {
     if (progress <= 0f) return
 
@@ -210,7 +210,7 @@ private fun DrawScope.drawBusFlowCurve(
     }
     drawPath(
         path = path,
-        color = TerminalGreen.copy(alpha = 0.12f),
+        color = viz.dataPrimary.copy(alpha = 0.12f),
         style = Stroke(width = 1.5.dp.toPx())
     )
 
@@ -227,8 +227,8 @@ private fun DrawScope.drawBusFlowCurve(
         val radius = (4f - i * 0.28f).coerceAtLeast(1.2f).dp.toPx()
         val color = when {
             i == 0 -> Color.White
-            i <= 3 -> TerminalGreen.copy(alpha = 1f)
-            else -> TerminalGreen
+            i <= 3 -> viz.dataPrimary.copy(alpha = 1f)
+            else -> viz.dataPrimary
         }
         // 发光外圈
         drawCircle(

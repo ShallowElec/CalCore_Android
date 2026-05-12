@@ -34,9 +34,7 @@ import com.cloveriris.calcore.domain.model.Architecture
 import com.cloveriris.calcore.domain.model.PipelinePhase
 import com.cloveriris.calcore.domain.model.VisualizationLevel
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.TerminalBackground
-import com.cloveriris.calcore.ui.theme.TerminalGray
-import com.cloveriris.calcore.ui.theme.TerminalGreen
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * 可视化舞台底部控制条
@@ -57,11 +55,12 @@ fun BottomControlBar(
     onToggleLevel: (VisualizationLevel) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(40.dp)
-            .background(TerminalBackground)
+            .background(viz.stageBg)
             .padding(horizontal = 12.dp)
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -77,7 +76,7 @@ fun BottomControlBar(
             text = architecture.displayName,
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
-            color = TerminalGreen.copy(alpha = 0.8f)
+            color = viz.dataPrimary.copy(alpha = 0.8f)
         )
 
         Spacer(modifier = Modifier.width(4.dp))
@@ -87,7 +86,7 @@ fun BottomControlBar(
             text = "${playbackSpeed}x",
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
-            color = TerminalGray.copy(alpha = 0.6f)
+            color = viz.textMuted.copy(alpha = 0.6f)
         )
 
         Spacer(modifier = Modifier.width(8.dp))
@@ -105,7 +104,7 @@ fun BottomControlBar(
                     text = level.shortName,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = if (isActive) TerminalGreen else TerminalGray.copy(alpha = 0.3f)
+                    color = if (isActive) viz.dataPrimary else viz.textMuted.copy(alpha = 0.3f)
                 )
             }
         }
@@ -117,6 +116,7 @@ private fun PhaseIndicatorRow(
     activePhase: PipelinePhase?,
     completedPhases: Set<PipelinePhase>
 ) {
+    val viz = LocalVisualizationColors.current
     val infiniteTransition = rememberInfiniteTransition(label = "phase-blink")
     val blinkAlpha by infiniteTransition.animateFloat(
         initialValue = 0.4f,
@@ -136,9 +136,9 @@ private fun PhaseIndicatorRow(
             val isActive = activePhase == phase
             val isCompleted = phase in completedPhases
             val color = when {
-                isActive -> TerminalGreen.copy(alpha = blinkAlpha)
-                isCompleted -> TerminalGreen.copy(alpha = 0.5f)
-                else -> TerminalGray.copy(alpha = 0.15f)
+                isActive -> viz.dataPrimary.copy(alpha = blinkAlpha)
+                isCompleted -> viz.dataPrimary.copy(alpha = 0.5f)
+                else -> viz.textMuted.copy(alpha = 0.15f)
             }
             val size = when {
                 isActive -> 7.dp

@@ -27,9 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.presentation.visualization.DataPathVisual
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.TerminalAmber
-import com.cloveriris.calcore.ui.theme.TerminalGreen
-import com.cloveriris.calcore.ui.theme.TerminalGray
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * 寄存器组可视化
@@ -49,6 +47,7 @@ fun RegisterBank(
     modifier: Modifier = Modifier,
     dataPath: DataPathVisual? = null
 ) {
+    val viz = LocalVisualizationColors.current
     val textMeasurer = rememberTextMeasurer()
 
     // 值变化扫描线动画：检测值发生变化的寄存器行
@@ -81,18 +80,18 @@ fun RegisterBank(
 
             // 寄存器名背景：高亮时琥珀色脉冲，非零值时绿色细边框，零值时深灰
             val nameBgColor = when {
-                reg.isHighlighted -> TerminalAmber.copy(alpha = 0.25f)
-                reg.value != 0L -> TerminalGreen.copy(alpha = 0.08f)
+                reg.isHighlighted -> viz.accent.copy(alpha = 0.25f)
+                reg.value != 0L -> viz.dataPrimary.copy(alpha = 0.08f)
                 else -> Color(0xFF1A1A1A)
             }
             val nameTextColor = when {
-                reg.isHighlighted -> TerminalAmber
-                reg.value != 0L -> TerminalGreen.copy(alpha = 0.85f)
-                else -> TerminalGray.copy(alpha = 0.5f)
+                reg.isHighlighted -> viz.accent
+                reg.value != 0L -> viz.dataPrimary.copy(alpha = 0.85f)
+                else -> viz.textMuted.copy(alpha = 0.5f)
             }
             val nameBorderColor = when {
-                reg.isHighlighted -> TerminalAmber.copy(alpha = 0.6f)
-                reg.value != 0L -> TerminalGreen.copy(alpha = 0.3f)
+                reg.isHighlighted -> viz.accent.copy(alpha = 0.6f)
+                reg.value != 0L -> viz.dataPrimary.copy(alpha = 0.3f)
                 else -> Color(0xFF2A2A2A)
             }
 
@@ -135,13 +134,13 @@ fun RegisterBank(
                 val intensity = nibble / 15f
 
                 val blockBgColor = when {
-                    reg.isHighlighted -> TerminalAmber.copy(alpha = 0.1f + intensity * 0.5f)
-                    reg.value != 0L -> TerminalGreen.copy(alpha = 0.08f + intensity * 0.75f)
+                    reg.isHighlighted -> viz.accent.copy(alpha = 0.1f + intensity * 0.5f)
+                    reg.value != 0L -> viz.dataPrimary.copy(alpha = 0.08f + intensity * 0.75f)
                     else -> Color(0xFF151515)
                 }
                 val blockBorderColor = when {
-                    reg.isHighlighted -> TerminalAmber.copy(alpha = 0.15f)
-                    reg.value != 0L -> TerminalGreen.copy(alpha = 0.12f)
+                    reg.isHighlighted -> viz.accent.copy(alpha = 0.15f)
+                    reg.value != 0L -> viz.dataPrimary.copy(alpha = 0.12f)
                     else -> Color(0xFF222222)
                 }
 
@@ -159,9 +158,9 @@ fun RegisterBank(
 
                 // Hex 数字
                 val hexTextColor = when {
-                    reg.isHighlighted -> if (intensity > 0.5f) TerminalAmber.copy(alpha = 0.9f) else TerminalAmber.copy(alpha = 0.5f)
-                    reg.value != 0L -> if (intensity > 0.5f) Color.Black else TerminalGreen.copy(alpha = 0.7f)
-                    else -> TerminalGray.copy(alpha = 0.25f)
+                    reg.isHighlighted -> if (intensity > 0.5f) viz.accent.copy(alpha = 0.9f) else viz.accent.copy(alpha = 0.5f)
+                    reg.value != 0L -> if (intensity > 0.5f) Color.Black else viz.dataPrimary.copy(alpha = 0.7f)
+                    else -> viz.textMuted.copy(alpha = 0.25f)
                 }
                 val hexLayout = textMeasurer.measure(
                     hexDigits[i].toString(),
@@ -187,7 +186,7 @@ fun RegisterBank(
                 val beamWidth = 24.dp.toPx()
                 val beamAlpha = (1f - kotlin.math.abs(scanProgress - 0.5f) * 2f).coerceIn(0f, 1f)
                 drawRect(
-                    color = TerminalGreen.copy(alpha = 0.25f * beamAlpha),
+                    color = viz.dataPrimary.copy(alpha = 0.25f * beamAlpha),
                     topLeft = Offset((beamX - beamWidth).coerceAtLeast(0f), y),
                     size = Size(beamWidth.coerceAtMost(beamX), rowHeight - gap)
                 )
@@ -220,12 +219,12 @@ fun RegisterBank(
                 }
                 drawPath(
                     path = basePath,
-                    color = TerminalGreen.copy(alpha = 0.15f),
+                    color = viz.dataPrimary.copy(alpha = 0.15f),
                     style = Stroke(width = 3.dp.toPx())
                 )
                 drawPath(
                     path = basePath,
-                    color = TerminalGreen.copy(alpha = 0.08f),
+                    color = viz.dataPrimary.copy(alpha = 0.08f),
                     style = Stroke(width = 6.dp.toPx())
                 )
 
@@ -239,8 +238,8 @@ fun RegisterBank(
                     val radius = (4.5f - i * 0.35f).coerceAtLeast(1.5f).dp.toPx()
                     val color = when {
                         i == 0 -> Color.White
-                        i <= 2 -> TerminalGreen.copy(alpha = 1f)
-                        else -> TerminalGreen
+                        i <= 2 -> viz.dataPrimary.copy(alpha = 1f)
+                        else -> viz.dataPrimary
                     }
                     drawCircle(
                         color = color.copy(alpha = alpha),
@@ -251,7 +250,7 @@ fun RegisterBank(
 
                 // 箭头头部
                 if (dataPath.progress > 0.8f) {
-                    drawArrowHead(end, control, end, TerminalGreen.copy(alpha = dataPath.progress))
+                    drawArrowHead(end, control, end, viz.dataPrimary.copy(alpha = dataPath.progress))
                 }
 
                 // 路径经过的寄存器微高亮
@@ -260,7 +259,7 @@ fun RegisterBank(
                     if (idx in registers.indices) {
                         val ry = idx * rowHeight + gap
                         drawRect(
-                            color = TerminalGreen.copy(alpha = 0.06f * dataPath.progress),
+                            color = viz.dataPrimary.copy(alpha = 0.06f * dataPath.progress),
                             topLeft = Offset(0f, ry),
                             size = Size(size.width, rowHeight - gap)
                         )

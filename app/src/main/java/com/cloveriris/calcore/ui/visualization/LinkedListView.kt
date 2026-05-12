@@ -38,10 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.presentation.visualization.LinkedListNodeVisual
 import com.cloveriris.calcore.presentation.visualization.LinkedListWireState
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.TerminalAmber
-import com.cloveriris.calcore.ui.theme.TerminalBackground
-import com.cloveriris.calcore.ui.theme.TerminalGray
-import com.cloveriris.calcore.ui.theme.TerminalGreen
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * L5 链表可视化
@@ -58,15 +55,16 @@ fun LinkedListView(
     modifier: Modifier = Modifier,
     wireState: LinkedListWireState = LinkedListWireState()
 ) {
+    val viz = LocalVisualizationColors.current
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(TerminalBackground)
+            .background(viz.stageBg)
             .padding(12.dp)
     ) {
         Text(
             text = "L5: LINKED LIST",
-            color = TerminalGray,
+            color = viz.textMuted,
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
             letterSpacing = 2.sp,
@@ -76,7 +74,7 @@ fun LinkedListView(
         if (nodes.isEmpty()) {
             Text(
                 text = "Empty list",
-                color = TerminalGray.copy(alpha = 0.5f),
+                color = viz.textMuted.copy(alpha = 0.5f),
                 fontSize = 12.sp,
                 fontFamily = FontFamily.Monospace
             )
@@ -101,6 +99,7 @@ fun LinkedListView(
 
 @Composable
 private fun LinkedListNodesRow(nodes: List<LinkedListNodeVisual>) {
+    val viz = LocalVisualizationColors.current
     androidx.compose.foundation.layout.Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -113,7 +112,7 @@ private fun LinkedListNodesRow(nodes: List<LinkedListNodeVisual>) {
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "→",
-                    color = TerminalGreen,
+                    color = viz.dataPrimary,
                     fontSize = 18.sp,
                     fontFamily = FontFamily.Monospace
                 )
@@ -123,7 +122,7 @@ private fun LinkedListNodesRow(nodes: List<LinkedListNodeVisual>) {
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "→",
-                    color = TerminalGreen,
+                    color = viz.dataPrimary,
                     fontSize = 18.sp,
                     fontFamily = FontFamily.Monospace
                 )
@@ -135,6 +134,7 @@ private fun LinkedListNodesRow(nodes: List<LinkedListNodeVisual>) {
 
 @Composable
 private fun LinkedListNodeItem(node: LinkedListNodeVisual) {
+    val viz = LocalVisualizationColors.current
     val animProgress = remember(node.id) {
         Animatable(if (node.isNew) 0f else 1f)
     }
@@ -145,8 +145,8 @@ private fun LinkedListNodeItem(node: LinkedListNodeVisual) {
     }
 
     val scale = 0.5f + 0.5f * animProgress.value
-    val borderColor = if (node.isHighlighted) TerminalAmber else TerminalGreen
-    val bgColor = if (node.isPointer) Color.Transparent else TerminalGreen
+    val borderColor = if (node.isHighlighted) viz.accent else viz.dataPrimary
+    val bgColor = if (node.isPointer) Color.Transparent else viz.dataPrimary
 
     // 高亮脉冲动画
     val infiniteTransition = rememberInfiniteTransition(label = "node-pulse")
@@ -169,7 +169,7 @@ private fun LinkedListNodeItem(node: LinkedListNodeVisual) {
                     val pulseStroke = 2.dp.toPx()
                     val pulseInset = 2.dp.toPx() + pulseStroke
                     drawRoundRect(
-                        color = TerminalAmber.copy(alpha = pulseAlpha * 0.5f),
+                        color = viz.accent.copy(alpha = pulseAlpha * 0.5f),
                         topLeft = Offset(-pulseInset, -pulseInset),
                         size = androidx.compose.ui.geometry.Size(
                             size.width + pulseInset * 2,
@@ -194,7 +194,7 @@ private fun LinkedListNodeItem(node: LinkedListNodeVisual) {
                 } else {
                     // 实心方块 = 数据节点
                     drawRoundRect(
-                        color = TerminalGreen,
+                        color = viz.dataPrimary,
                         topLeft = Offset(0f, 0f),
                         size = androidx.compose.ui.geometry.Size(size.width, size.height),
                         cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
@@ -206,7 +206,7 @@ private fun LinkedListNodeItem(node: LinkedListNodeVisual) {
     ) {
         Text(
             text = node.value,
-            color = if (node.isPointer) TerminalGreen else Color.Black,
+            color = if (node.isPointer) viz.dataPrimary else Color.Black,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace
@@ -216,15 +216,16 @@ private fun LinkedListNodeItem(node: LinkedListNodeVisual) {
 
 @Composable
 private fun NullTerminator() {
+    val viz = LocalVisualizationColors.current
     Box(
         modifier = Modifier
-            .background(Color(0xFF1F1F1F), RoundedCornerShape(4.dp))
+            .background(viz.surface, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = "NULL",
-            color = TerminalGray,
+            color = viz.textMuted,
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace
         )
@@ -242,6 +243,7 @@ private fun LinkedListWireOverlay(
     wireState: LinkedListWireState,
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     val progressAnim = remember(wireState.fromNodeId, wireState.toNodeId) {
         Animatable(0f)
     }
@@ -272,7 +274,7 @@ private fun LinkedListWireOverlay(
         // 基线（淡绿色）
         drawPath(
             path = path,
-            color = TerminalGreen.copy(alpha = 0.15f),
+            color = viz.dataPrimary.copy(alpha = 0.15f),
             style = Stroke(width = 2.dp.toPx())
         )
 
@@ -290,7 +292,7 @@ private fun LinkedListWireOverlay(
             val alpha = (1f - i / steps.toFloat()).coerceIn(0.15f, 1f)
             val radius = (3.5f - i * 0.3f).dp.toPx()
             drawCircle(
-                color = TerminalGreen.copy(alpha = alpha),
+                color = viz.dataPrimary.copy(alpha = alpha),
                 radius = radius,
                 center = pos
             )
@@ -301,7 +303,7 @@ private fun LinkedListWireOverlay(
             drawArrowHead(
                 tip = Offset(endX, y),
                 direction = Offset(-1f, 0f),
-                color = TerminalGreen
+                color = viz.dataPrimary
             )
         }
     }

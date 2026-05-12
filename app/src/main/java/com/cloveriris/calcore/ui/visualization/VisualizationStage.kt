@@ -42,9 +42,7 @@ import com.cloveriris.calcore.domain.model.VisualizationLevel
 import com.cloveriris.calcore.domain.model.toVisualizationLevels
 import com.cloveriris.calcore.presentation.visualization.VisualizationUiState
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.TerminalBackground
-import com.cloveriris.calcore.ui.theme.TerminalGray
-import com.cloveriris.calcore.ui.theme.TerminalGreen
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * 可视化舞台容器 —— 阶段式流水线布局
@@ -63,11 +61,12 @@ fun VisualizationStage(
     onRestart: () -> Unit = {},
     onToggleLevel: (VisualizationLevel) -> Unit = {}
 ) {
+    val viz = LocalVisualizationColors.current
     val scrollState = rememberSaveable(saver = ScrollState.Saver) {
         ScrollState(0)
     }
 
-    Box(modifier = modifier.background(TerminalBackground)) {
+    Box(modifier = modifier.background(viz.stageBg)) {
         Column(
             modifier = Modifier
                 .verticalScroll(scrollState)
@@ -116,6 +115,7 @@ fun VisualizationStage(
 
 @Composable
 private fun PhasePipelineContent(state: VisualizationUiState) {
+    val viz = LocalVisualizationColors.current
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -175,10 +175,11 @@ private fun ActivePhaseCard(
     state: VisualizationUiState,
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     Column(
         modifier = modifier
             .animateContentSize(animationSpec = tween(300))
-            .background(TerminalGreen.copy(alpha = 0.04f))
+            .background(viz.dataPrimary.copy(alpha = 0.04f))
             .padding(8.dp)
     ) {
         // 阶段标题行：序号 + 名称 + 进度条
@@ -190,12 +191,12 @@ private fun ActivePhaseCard(
             // 序号标签
             Box(
                 modifier = Modifier
-                    .background(TerminalGreen.copy(alpha = 0.15f), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                    .background(viz.dataPrimary.copy(alpha = 0.15f), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
                     .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
                 Text(
                     text = "%02d".format(orderNum),
-                    color = TerminalGreen,
+                    color = viz.dataPrimary,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace
                 )
@@ -204,7 +205,7 @@ private fun ActivePhaseCard(
             // 阶段名
             Text(
                 text = phase.displayName.uppercase(),
-                color = TerminalGreen,
+                color = viz.dataPrimary,
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
                 letterSpacing = 1.sp,
@@ -214,7 +215,7 @@ private fun ActivePhaseCard(
             // 进度百分比
             Text(
                 text = "${(state.phaseProgress * 100).toInt()}%",
-                color = TerminalGreen.copy(alpha = 0.7f),
+                color = viz.dataPrimary.copy(alpha = 0.7f),
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace
             )
@@ -226,7 +227,7 @@ private fun ActivePhaseCard(
                 modifier = Modifier
                     .width(3.dp)
                     .height(animatedHeightForPhase(phase, state))
-                    .background(TerminalGreen.copy(alpha = 0.6f))
+                    .background(viz.dataPrimary.copy(alpha = 0.6f))
             )
             Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -256,6 +257,7 @@ private fun PhaseVisualContent(
     state: VisualizationUiState,
     isActive: Boolean
 ) {
+    val viz = LocalVisualizationColors.current
     val levels = phase.toVisualizationLevels()
 
     when (phase) {
@@ -282,7 +284,7 @@ private fun PhaseVisualContent(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = state.bitGridLabel,
-                    color = TerminalGray.copy(alpha = 0.7f),
+                    color = viz.textMuted.copy(alpha = 0.7f),
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace
                 )
@@ -411,12 +413,13 @@ private fun PhaseVisualContent(
 
 @Composable
 private fun ResultFlowIndicator(progress: Float) {
+    val viz = LocalVisualizationColors.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text("REGISTER", color = TerminalGray, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        Text("REGISTER", color = viz.textMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
 
         // 多粒子流光带（替代简单进度条）
         androidx.compose.foundation.Canvas(
@@ -425,7 +428,7 @@ private fun ResultFlowIndicator(progress: Float) {
             val barY = size.height / 2
             // 基线
             drawLine(
-                color = TerminalGray.copy(alpha = 0.15f),
+                color = viz.textMuted.copy(alpha = 0.15f),
                 start = Offset(0f, barY),
                 end = Offset(size.width, barY),
                 strokeWidth = 2.dp.toPx()
@@ -434,7 +437,7 @@ private fun ResultFlowIndicator(progress: Float) {
             if (progress > 0f) {
                 val endX = size.width * progress
                 drawLine(
-                    color = TerminalGreen.copy(alpha = 0.6f),
+                    color = viz.dataPrimary.copy(alpha = 0.6f),
                     start = Offset(0f, barY),
                     end = Offset(endX, barY),
                     strokeWidth = 2.dp.toPx()
@@ -449,8 +452,8 @@ private fun ResultFlowIndicator(progress: Float) {
                     val radius = (3.5f - i * 0.4f).coerceAtLeast(1f).dp.toPx()
                     val color = when {
                         i == 0 -> Color.White
-                        i <= 2 -> TerminalGreen.copy(alpha = 1f)
-                        else -> TerminalGreen
+                        i <= 2 -> viz.dataPrimary.copy(alpha = 1f)
+                        else -> viz.dataPrimary
                     }
                     drawCircle(
                         color = color.copy(alpha = alpha),
@@ -462,13 +465,13 @@ private fun ResultFlowIndicator(progress: Float) {
                 if (progress > 0.85f) {
                     val tipX = endX
                     drawLine(
-                        color = TerminalGreen,
+                        color = viz.dataPrimary,
                         start = Offset(tipX - 5.dp.toPx(), barY - 3.dp.toPx()),
                         end = Offset(tipX, barY),
                         strokeWidth = 1.5f.dp.toPx()
                     )
                     drawLine(
-                        color = TerminalGreen,
+                        color = viz.dataPrimary,
                         start = Offset(tipX - 5.dp.toPx(), barY + 3.dp.toPx()),
                         end = Offset(tipX, barY),
                         strokeWidth = 1.5f.dp.toPx()
@@ -477,7 +480,7 @@ private fun ResultFlowIndicator(progress: Float) {
             }
         }
 
-        Text("DISPLAY", color = TerminalGray, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        Text("DISPLAY", color = viz.textMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -490,6 +493,7 @@ private fun CompletedPhaseCard(
     summary: String,
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     AnimatedVisibility(
         visible = true,
         enter = fadeIn(tween(300)),
@@ -505,7 +509,7 @@ private fun CompletedPhaseCard(
             // 序号（暗淡绿色）
             Text(
                 text = "%02d".format(orderNum),
-                color = TerminalGreen.copy(alpha = 0.3f),
+                color = viz.dataPrimary.copy(alpha = 0.3f),
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace
             )
@@ -513,7 +517,7 @@ private fun CompletedPhaseCard(
             // 阶段名
             Text(
                 text = phase.displayName.uppercase(),
-                color = TerminalGray.copy(alpha = 0.5f),
+                color = viz.textMuted.copy(alpha = 0.5f),
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
                 letterSpacing = 1.sp
@@ -523,7 +527,7 @@ private fun CompletedPhaseCard(
             if (summary.isNotBlank()) {
                 Text(
                     text = "▸ $summary",
-                    color = TerminalGray.copy(alpha = 0.4f),
+                    color = viz.textMuted.copy(alpha = 0.4f),
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace,
                     modifier = Modifier.weight(1f),
@@ -534,7 +538,7 @@ private fun CompletedPhaseCard(
             // 完成标记
             Text(
                 text = "✓",
-                color = TerminalGreen.copy(alpha = 0.3f),
+                color = viz.dataPrimary.copy(alpha = 0.3f),
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace
             )
@@ -550,6 +554,7 @@ private fun PendingPhaseLine(
     orderNum: Int,
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     Row(
         modifier = modifier.padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -557,20 +562,20 @@ private fun PendingPhaseLine(
     ) {
         Text(
             text = "%02d".format(orderNum),
-            color = TerminalGray.copy(alpha = 0.15f),
+            color = viz.textMuted.copy(alpha = 0.15f),
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace
         )
         Text(
             text = phase.displayName.uppercase(),
-            color = TerminalGray.copy(alpha = 0.2f),
+            color = viz.textMuted.copy(alpha = 0.2f),
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
             letterSpacing = 1.sp
         )
         Box(
             modifier = Modifier.weight(1f).height(1.dp)
-                .background(TerminalGray.copy(alpha = 0.1f))
+                .background(viz.textMuted.copy(alpha = 0.1f))
         )
     }
 }
@@ -579,12 +584,13 @@ private fun PendingPhaseLine(
 
 @Composable
 private fun PhaseDivider() {
+    val viz = LocalVisualizationColors.current
     HorizontalDivider(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 2.dp),
         thickness = 0.5.dp,
-        color = TerminalGray.copy(alpha = 0.15f)
+        color = viz.textMuted.copy(alpha = 0.15f)
     )
 }
 
@@ -592,6 +598,7 @@ private fun PhaseDivider() {
 
 @Composable
 private fun RowTitle(state: VisualizationUiState) {
+    val viz = LocalVisualizationColors.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -599,7 +606,7 @@ private fun RowTitle(state: VisualizationUiState) {
     ) {
         Text(
             text = "VISUALIZATION",
-            color = TerminalGray,
+            color = viz.textMuted,
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
             letterSpacing = 2.sp
@@ -609,7 +616,7 @@ private fun RowTitle(state: VisualizationUiState) {
                 text = "${state.playbackSpeed}x",
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
-                color = TerminalGray.copy(alpha = 0.5f)
+                color = viz.textMuted.copy(alpha = 0.5f)
             )
             Spacer(modifier = Modifier.width(8.dp))
             if (state.lastEventDescription.isNotEmpty()) {
@@ -617,7 +624,7 @@ private fun RowTitle(state: VisualizationUiState) {
                     text = state.lastEventDescription,
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = TerminalGreen.copy(alpha = 0.7f)
+                    color = viz.dataPrimary.copy(alpha = 0.7f)
                 )
             }
         }
@@ -626,9 +633,10 @@ private fun RowTitle(state: VisualizationUiState) {
 
 @Composable
 private fun SectionTitle(text: String) {
+    val viz = LocalVisualizationColors.current
     Text(
         text = text,
-        color = TerminalGray,
+        color = viz.textMuted,
         fontSize = 10.sp,
         fontFamily = FontFamily.Monospace,
         letterSpacing = 2.sp
@@ -637,6 +645,7 @@ private fun SectionTitle(text: String) {
 
 @Composable
 private fun VisualizationPlaceholder() {
+    val viz = LocalVisualizationColors.current
     val infiniteTransition = rememberInfiniteTransition(label = "placeholder")
     val glowAlpha by infiniteTransition.animateFloat(
         initialValue = 0.3f,
@@ -665,7 +674,7 @@ private fun VisualizationPlaceholder() {
         androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
             val beamY = size.height * scanOffset
             drawRect(
-                color = TerminalGreen.copy(alpha = 0.03f),
+                color = viz.dataPrimary.copy(alpha = 0.03f),
                 topLeft = Offset(0f, beamY - 8.dp.toPx()),
                 size = Size(size.width, 16.dp.toPx())
             )
@@ -677,14 +686,14 @@ private fun VisualizationPlaceholder() {
         ) {
             Text(
                 text = "▶ Press any key to visualize",
-                color = TerminalGreen.copy(alpha = 0.5f + 0.5f * glowAlpha),
+                color = viz.dataPrimary.copy(alpha = 0.5f + 0.5f * glowAlpha),
                 fontSize = 16.sp,
                 fontFamily = FontFamily.Monospace
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "01 INPUT → 02 REGISTERS → 03 MEMORY → 04 PARSE → 05 EXECUTE → 06 OUTPUT",
-                color = TerminalGray.copy(alpha = 0.35f + 0.15f * glowAlpha),
+                color = viz.textMuted.copy(alpha = 0.35f + 0.15f * glowAlpha),
                 fontSize = 9.sp,
                 fontFamily = FontFamily.Monospace
             )

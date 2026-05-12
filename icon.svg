@@ -1,0 +1,38 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <rect id="solid" width="40" height="40" rx="4" fill="#4FC3F7" />
+    <rect id="hollow" width="36" height="36" rx="4" x="2" y="2" fill="none" stroke="#4FC3F7" stroke-width="4" stroke-opacity="0.6" />
+  </defs>
+
+  <rect width="512" height="512" rx="100" fill="#0A141F" />
+
+  <path d="M0 128H512 M0 256H512 M0 384H512 M128 0V512 M256 0V512 M384 0V512" stroke="#1A3040" stroke-width="2" />
+
+  <g transform="translate(106, 106)" filter="url(#glow)">
+    <use href="#solid" x="80" y="0" />
+    <use href="#hollow" x="120" y="0" />
+    <use href="#solid" x="160" y="0" />
+    <use href="#solid" x="200" y="0" />
+
+    <use href="#solid" x="40" y="40" />
+    <use href="#hollow" x="240" y="40" />
+
+    <use href="#solid" x="0" y="80" />
+    <rect width="40" height="40" rx="4" x="0" y="120" fill="#E1F5FE" opacity="0.9" />
+    <use href="#solid" x="0" y="160" />
+    <use href="#hollow" x="0" y="200" />
+
+    <use href="#solid" x="40" y="240" />
+    <use href="#hollow" x="240" y="240" />
+
+    <use href="#hollow" x="80" y="280" />
+    <use href="#solid" x="120" y="280" />
+    <use href="#solid" x="160" y="280" />
+    <use href="#solid" x="200" y="280" />
+  </g>
+</svg>

@@ -39,9 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.engine.parser.BinaryOperator
 import com.cloveriris.calcore.engine.parser.Expression
 import com.cloveriris.calcore.engine.parser.UnaryOperator
-import com.cloveriris.calcore.ui.theme.TerminalBackground
-import com.cloveriris.calcore.ui.theme.TerminalGray
-import com.cloveriris.calcore.ui.theme.TerminalGreen
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * AST 树形可视化
@@ -56,6 +54,7 @@ fun AstTreeView(
     highlightedNode: Expression? = null,
     growthProgress: Float = 1.0f
 ) {
+    val viz = LocalVisualizationColors.current
     if (expression == null) {
         Box(
             modifier = modifier
@@ -65,7 +64,7 @@ fun AstTreeView(
         ) {
             Text(
                 text = "No expression to visualize",
-                color = TerminalGray.copy(alpha = 0.6f),
+                color = viz.textMuted.copy(alpha = 0.6f),
                 fontSize = 14.sp
             )
         }
@@ -96,6 +95,7 @@ private fun AstNode(
     depth: Int = 0,
     growthProgress: Float = 1.0f
 ) {
+    val viz = LocalVisualizationColors.current
     val threshold = depth * 0.25f
     val isVisible = growthProgress >= threshold
 
@@ -110,17 +110,17 @@ private fun AstNode(
         // 已计算的节点变暗，当前活跃节点脉冲
         val isEvaluated = growthProgress >= 1.0f && depth > 0
         val nodeColor = when {
-            isHighlighted -> TerminalGreen.copy(alpha = 0.35f)
-            isEvaluated -> TerminalGray.copy(alpha = 0.08f)
-            else -> TerminalGray.copy(alpha = 0.15f)
+            isHighlighted -> viz.dataPrimary.copy(alpha = 0.35f)
+            isEvaluated -> viz.textMuted.copy(alpha = 0.08f)
+            else -> viz.textMuted.copy(alpha = 0.15f)
         }
         val textColor = when {
-            isHighlighted -> TerminalGreen
-            isEvaluated -> TerminalGray.copy(alpha = 0.5f)
-            else -> TerminalGray.copy(alpha = 0.9f)
+            isHighlighted -> viz.dataPrimary
+            isEvaluated -> viz.textMuted.copy(alpha = 0.5f)
+            else -> viz.textMuted.copy(alpha = 0.9f)
         }
         val borderColor = when {
-            isHighlighted -> TerminalGreen.copy(alpha = 0.6f)
+            isHighlighted -> viz.dataPrimary.copy(alpha = 0.6f)
             else -> Color.Transparent
         }
         val label = expressionLabel(expression)
@@ -154,7 +154,7 @@ private fun AstNode(
                     if (valueBubble != null) {
                         Text(
                             text = valueBubble,
-                            color = TerminalGreen.copy(alpha = 0.7f),
+                            color = viz.dataPrimary.copy(alpha = 0.7f),
                             fontSize = 9.sp,
                             fontFamily = FontFamily.Monospace,
                             textAlign = TextAlign.Center
@@ -185,7 +185,7 @@ private fun AstNode(
                         .width(2.dp)
                         .height(12.dp)
                         .scale(scaleX = 1f, scaleY = wireScale)
-                        .background(TerminalGray.copy(alpha = 0.3f)),
+                        .background(viz.textMuted.copy(alpha = 0.3f)),
                     contentAlignment = Alignment.TopCenter
                 ) {
                     if (wireVisible && flowProgress.value > 0.01f && flowProgress.value < 0.99f) {
@@ -193,7 +193,7 @@ private fun AstNode(
                             modifier = Modifier
                                 .width(2.dp)
                                 .height(4.dp)
-                                .background(TerminalGreen.copy(alpha = 0.8f))
+                                .background(viz.dataPrimary.copy(alpha = 0.8f))
                         )
                     }
                 }

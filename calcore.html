@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Calcore — See the light through the machine</title>
+<style>
+:root{
+  --bg:#050505;
+  --surface:#0f0f0f;
+  --panel:#141414;
+  --border:#1f1f1f;
+  --green:#00ff41;
+  --green-dim:#008f11;
+  --green-glow:rgba(0,255,65,0.15);
+  --text:#e8e8e8;
+  --text-dim:#666;
+  --amber:#ffa657;
+  --radius:6px;
+}
+
+*{-webkit-tap-highlight-color:transparent;box-sizing:border-box;}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:'SF Mono',Monaco,'Cascadia Code','Fira Code',Consolas,'Courier New',monospace;overflow:hidden;}
+
+/* 应用容器：上下分区 */
+.app{display:flex;flex-direction:column;height:100vh;}
+
+/* ---------- 顶部表达式条 ---------- */
+.expr-bar{
+  flex:0 0 auto;
+  padding:12px 16px 8px;
+  background:linear-gradient(180deg,#0a0a0a 0%,var(--surface) 100%);
+  border-bottom:1px solid var(--border);
+}
+.expr-label{font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-bottom:4px;}
+.expr-display{
+  font-size:22px;
+  color:var(--text);
+  text-align:right;
+  white-space:nowrap;
+  overflow-x:auto;
+  overflow-y:hidden;
+  min-height:32px;
+  line-height:32px;
+}
+.expr-display .cursor{
+  display:inline-block;width:8px;height:22px;background:var(--green);vertical-align:middle;animation:blink 1s step-end infinite;margin-left:2px;
+}
+@keyframes blink{50%{opacity:0;}}
+
+/* ---------- 键盘区（上半主体） ---------- */
+.keypad-section{
+  flex:1 1 auto;
+  display:flex;
+  flex-direction:column;
+  padding:8px 12px;
+  overflow:hidden;
+}
+.mode-tabs{
+  display:flex;gap:8px;margin-bottom:8px;flex:0 0 auto;
+}
+.mode-tabs button{
+  background:transparent;border:1px solid var(--border);color:var(--text-dim);
+  padding:4px 12px;border-radius:var(--radius);font-size:12px;cursor:pointer;transition:.2s;
+}
+.mode-tabs button.active{border-color:var(--green);color:var(--green);background:var(--green-glow);}
+.arch-bar{
+  display:flex;gap:6px;margin-bottom:8px;flex:0 0 auto;align-items:center;
+}
+.arch-label{font-size:10px;color:var(--text-dim);margin-right:4px;}
+.arch-btn{
+  background:var(--panel);border:1px solid var(--border);color:var(--text-dim);
+  padding:3px 8px;border-radius:4px;font-size:11px;cursor:pointer;
+}
+.arch-btn.active{border-color:var(--green);color:var(--green);}
+
+.keypad{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:8px;
+  flex:1 1 auto;
+}
+.keypad button{
+  background:var(--panel);
+  border:1px solid var(--border);
+  color:var(--text);
+  border-radius:var(--radius);
+  font-size:18px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s ease;
+  position:relative;overflow:hidden;
+  user-select:none;
+}
+.keypad button:active{transform:scale(0.96);border-color:var(--green-dim);}
+.keypad button.op{color:var(--green);border-color:#223322;}
+.keypad button.eq{background:var(--green);color:#000;border-color:var(--green);font-weight:bold;}
+.keypad button.eq:active{background:var(--green-dim);}
+.keypad button.fn{font-size:14px;color:var(--text-dim);}
+.keypad button.hazard{color:var(--amber);border-color:#332211;}
+
+/* 按键涟漪 */
+.ripple{
+  position:absolute;border-radius:50%;background:var(--green-glow);
+  transform:scale(0);animation:ripple .6s linear;pointer-events:none;
+}
+@keyframes ripple{to{transform:scale(4);opacity:0;}}
+
+/* ---------- 可视化舞台 ---------- */
+.viz-stage{
+  flex:0 0 auto;
+  height:38vh;
+  min-height:260px;
+  background:linear-gradient(180deg,var(--surface) 0%,var(--bg) 40%,var(--bg) 60%,var(--surface) 100%);
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+  position:relative;
+  overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+
+/* 菱形骨架 */
+.diamond{
+  position:relative;
+  width:min(320px,90vw);
+  height:100%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.tri-up,.tri-down{
+  display:flex;flex-direction:column;align-items:center;
+  width:100%;position:relative;
+}
+.tri-up{flex:1 1 45%;justify-content:flex-end;padding-bottom:4px;}
+.tri-down{flex:1 1 45%;justify-content:flex-start;padding-top:4px;}
+
+/* 层级漏斗 */
+.layer{
+  display:flex;align-items:center;justify-content:center;
+  gap:4px;
+  margin:2px 0;
+  font-size:10px;color:var(--text-dim);
+  position:relative;
+  transition:.3s;
+}
+/* 漏斗宽度：ASCII最宽，逐层收束，ALU最窄，再展开 */
+.layer-ascii{width:100%;}
+.layer-hex{width:85%;}
+.layer-asm{width:70%;}
+.layer-bin{width:55%;}
+.layer-stack{width:45%;}
+
+/* 方块语义 */
+.block{
+  width:18px;height:18px;border-radius:3px;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:9px;transition:all .3s ease;
+}
+.block.solid{background:var(--green);color:#000;border:1px solid var(--green);box-shadow:0 0 8px var(--green-glow);}
+.block.hollow{background:transparent;border:1px solid var(--green-dim);color:var(--green-dim);box-shadow:none;}
+.block.mini{width:10px;height:10px;border-radius:2px;font-size:0;}
+.block.addr{font-size:9px;color:var(--text-dim);border:none;width:auto;height:auto;background:transparent;}
+
+/* ALU 核心 */
+.alu-core{
+  width:48px;height:48px;
+  background:var(--bg);
+  border:2px solid var(--green);
+  box-shadow:0 0 20px var(--green-glow), inset 0 0 10px var(--green-glow);
+  transform:rotate(45deg);
+  display:flex;align-items:center;justify-content:center;
+  margin:6px 0;
+  position:relative;z-index:2;
+}
+.alu-core::after{
+  content:'ALU';transform:rotate(-45deg);
+  font-size:10px;color:var(--green);letter-spacing:1px;
+}
+.alu-core.active{animation:aluPulse .6s ease;}
+@keyframes aluPulse{
+  0%{box-shadow:0 0 20px var(--green-glow), inset 0 0 10px var(--green-glow);}
+  50%{box-shadow:0 0 60px var(--green), inset 0 0 30px var(--green-glow);border-color:#fff;}
+  100%{box-shadow:0 0 20px var(--green-glow), inset 0 0 10px var(--green-glow);}
+}
+
+/* 数据包动画 */
+.packet{
+  position:absolute;z-index:5;
+  width:20px;height:20px;
+  background:var(--green);border-radius:3px;
+  box-shadow:0 0 10px var(--green);
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;color:#000;
+  pointer-events:none;
+  opacity:0;
+}
+
+/* 通道连接线（伪元素网格） */
+.layer::before{
+  content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:120%;height:1px;background:linear-gradient(90deg,transparent,var(--green-dim),transparent);
+  opacity:.3;z-index:0;
+}
+
+/* ---------- 底部结果坑 ---------- */
+.result-pit{
+  flex:0 0 auto;
+  padding:16px;
+  background:linear-gradient(180deg,var(--surface) 0%,#0a0a0a 100%);
+  border-top:1px solid var(--border);
+  position:relative;text-align:center;
+}
+.result-label{font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-bottom:6px;}
+.result-value{
+  font-size:36px;color:var(--green);font-weight:300;
+  min-height:44px;line-height:44px;
+  text-shadow:0 0 20px var(--green-glow);
+  position:relative;z-index:2;
+}
+.result-pit::before{
+  content:'';position:absolute;left:10%;right:10%;top:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--green-dim),transparent);
+}
+.pit-glow{
+  position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+  width:120px;height:40px;background:var(--green-glow);filter:blur(20px);opacity:.6;z-index:1;
+}
+
+/* 结果落入动画 */
+.drop-in{animation:dropIn .5s cubic-bezier(.22,1,.36,1);}
+@keyframes dropIn{
+  0%{transform:translateY(-30px) scale(1.2);opacity:0;letter-spacing:8px;}
+  60%{transform:translateY(4px) scale(.98);opacity:1;}
+  100%{transform:translateY(0) scale(1);letter-spacing:normal;}
+}
+
+/* 微型二进制网格（BIN层） */
+.bit-grid{display:flex;gap:1px;flex-wrap:wrap;justify-content:center;max-width:90px;}
+.bit-grid .block{margin:0;}
+
+/* 滚动条隐藏 */
+::-webkit-scrollbar{width:0;height:0;}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- 表达式输入 -->
+  <div class="expr-bar">
+    <div class="expr-label">EXPRESSION △</div>
+    <div class="expr-display" id="exprDisplay"><span class="cursor"></span></div>
+  </div>
+
+  <!-- 键盘 -->
+  <div class="keypad-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="mode-tabs" id="modeTabs">
+        <button class="active" data-mode="std">标准</button>
+        <button data-mode="sci">科学</button>
+        <button data-mode="prog">程序员</button>
+      </div>
+      <div class="arch-bar" id="archBar">
+        <span class="arch-label">ARCH</span>
+        <button class="arch-btn active" data-arch="x64">X86-64</button>
+        <button class="arch-btn" data-arch="rv64">RV64</button>
+        <button class="arch-btn" data-arch="arm64">ARM64</button>
+      </div>
+    </div>
+    <div class="keypad" id="keypad"></div>
+  </div>
+
+  <!-- 菱形可视化舞台 -->
+  <div class="viz-stage" id="vizStage">
+    <div class="diamond" id="diamond">
+      <div class="tri-up" id="triUp">
+        <div class="layer layer-ascii" id="lAsciiUp">ASCII △</div>
+        <div class="layer layer-hex" id="lHexUp">HEX</div>
+        <div class="layer layer-asm" id="lAsmUp">ASM</div>
+        <div class="layer layer-bin" id="lBinUp">BIN</div>
+        <div class="layer layer-stack" id="lStackUp">STACK</div>
+      </div>
+      <div class="alu-core" id="aluCore"></div>
+      <div class="tri-down" id="triDown">
+        <div class="layer layer-stack" id="lStackDown">STACK</div>
+        <div class="layer layer-bin" id="lBinDown">BIN</div>
+        <div class="layer layer-asm" id="lAsmDown">ASM</div>
+        <div class="layer layer-hex" id="lHexDown">HEX</div>
+        <div class="layer layer-ascii" id="lAsciiDown">ASCII ▽</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 结果坑 -->
+  <div class="result-pit" id="resultPit">
+    <div class="result-label">RESULT PIT</div>
+    <div class="result-value" id="resultValue">0</div>
+    <div class="pit-glow"></div>
+  </div>
+</div>
+
+<script>
+/* =========================
+   Calcore Engine
+   ========================= */
+class Calcore{
+  constructor(){
+    this.expr='';
+    this.result='0';
+    this.mode='std'; // std | sci | prog
+    this.arch='x64'; // x64 | rv64 | arm64
+    this.lastAns='0';
+    this.resetState();
+    this.buildKeys();
+    this.bindMode();
+    this.bindArch();
+    this.updateExprDisplay();
+  }
+
+  resetState(){
+    this.tokens=[];
+    this.expectOperand=true;
+  }
+
+  /* ---------- 键盘布局 ---------- */
+  keyMap(){
+    const std=[
+      ['C','CE','⌫','%','÷'],
+      ['7','8','9','×','^'],
+      ['4','5','6','-','√'],
+      ['1','2','3','+','='],
+      ['0','00','.','±','=']
+    ];
+    const sci=[
+      ['C','CE','⌫','sin','÷'],
+      ['7','8','9','cos','×'],
+      ['4','5','6','tan','-'],
+      ['1','2','3','log','+'],
+      ['0','π','e','ln','=']
+    ];
+    const prog=[
+      ['C','CE','⌫','AND','÷'],
+      ['7','8','9','OR','×'],
+      ['4','5','6','XOR','-'],
+      ['1','2','3','NOT','+'],
+      ['0','0x','<<','>>','=']
+    ];
+    return {std,sci,prog}[this.mode];
+  }
+
+  buildKeys(){
+    const g=document.getElementById('keypad');
+    g.innerHTML='';
+    const layout=this.keyMap();
+    layout.forEach((row,r)=>{
+      row.forEach((k,c)=>{
+        if(k==='=' && c===4 && r===3) return; // skip duplicate
+        const b=document.createElement('button');
+        b.textContent=k;
+        b.dataset.key=k;
+        if(['C','CE','⌫'].includes(k)) b.className='hazard';
+        else if(['÷','×','-','+','=','%','^','√'].includes(k)) b.className='op';
+        else if(['sin','cos','tan','log','ln','π','e','AND','OR','XOR','NOT','0x','<<','>>'].includes(k)) b.className='fn';
+        else b.className='num';
+        if(k==='=') b.style.gridColumn='span 1';
+        b.addEventListener('click',e=>this.onKey(k,e));
+        g.appendChild(b);
+      });
+    });
+    // 修正最后一行等号跨列（如果布局需要）
+    const eqs=g.querySelectorAll('button[data-key="="]');
+    if(eqs.length>1){ eqs[eqs.length-1].style.gridColumn='span 1'; }
+  }
+
+  bindMode(){
+    document.getElementById('modeTabs').addEventListener('click',e=>{
+      if(!e.target.dataset.mode) return;
+      this.mode=e.target.dataset.mode;
+      document.querySelectorAll('#modeTabs button').forEach(b=>b.classList.toggle('active',b===e.target));
+      this.buildKeys();
+      this.clear();
+    });
+  }
+  bindArch(){
+    document.getElementById('archBar').addEventListener('click',e=>{
+      if(!e.target.dataset.arch) return;
+      this.arch=e.target.dataset.arch;
+      document.querySelectorAll('#archBar .arch-btn').forEach(b=>b.classList.toggle('active',b===e.target));
+    });
+  }
+
+  /* ---------- 输入处理 ---------- */
+  onKey(k,e){
+    this.ripple(e);
+    if(k==='C'){this.clear();return;}
+    if(k==='CE'){this.expr='';this.resetState();this.updateExprDisplay();return;}
+    if(k==='⌫'){this.backspace();return;}
+    if(k==='='){this.execute();return;}
+    if(['sin','cos','tan','log','ln'].includes(k)){this.insertFunc(k);return;}
+    if(k==='π'){this.insertVal('3.141592653589793');return;}
+    if(k==='e'){this.insertVal('2.718281828459045');return;}
+    if(k==='0x'){this.insertVal('0x');return;}
+    if(k==='±'){this.toggleSign();return;}
+    if(k==='√'){this.wrap('√(','))');return;} // 简化处理
+    if(['AND','OR','XOR','NOT','<<','>>'].includes(k)){this.insertOp(k);return;}
+    if(['÷','×','-','+','%','^'].includes(k)){
+      const map={'÷':'/','×':'*'};
+      this.insertOp(map[k]||k);
+      return;
+    }
+    // 数字与点
+    this.insert(k);
+  }
+
+  ripple(e){
+    const btn=e.currentTarget;
+    const c=document.createElement('span');
+    c.className='ripple';
+    const rect=btn.getBoundingClientRect();
+    const size=Math.max(rect.width,rect.height);
+    c.style.width=c.style.height=size+'px';
+    c.style.left=(e.clientX-rect.left-size/2)+'px';
+    c.style.top=(e.clientY-rect.top-size/2)+'px';
+    btn.appendChild(c);
+    setTimeout(()=>c.remove(),600);
+  }
+
+  insert(ch){
+    if(this.expr==='0' && /[0-9]/.test(ch)) this.expr='';
+    this.expr+=ch;
+    this.expectOperand=false;
+    this.updateExprDisplay();
+    this.vizChar(ch);
+  }
+  insertOp(op){
+    if(this.expr==='') this.expr=this.lastAns;
+    this.expr+=op;
+    this.expectOperand=true;
+    this.updateExprDisplay();
+  }
+  insertVal(v){
+    if(this.expr==='0') this.expr='';
+    this.expr+=v;
+    this.expectOperand=false;
+    this.updateExprDisplay();
+    // 批量可视化
+    [...v].forEach((c,i)=>setTimeout(()=>this.vizChar(c),i*60));
+  }
+  insertFunc(fn){
+    if(this.expr==='0') this.expr='';
+    this.expr+=fn+'(';
+    this.expectOperand=true;
+    this.updateExprDisplay();
+  }
+  wrap(pre,suf){
+    if(this.expr==='0') this.expr='';
+    this.expr=pre+this.expr+suf;
+    this.updateExprDisplay();
+  }
+  toggleSign(){
+    // 简化：在表达式前加负号或移除
+    if(this.expr.startsWith('-')) this.expr=this.expr.slice(1);
+    else this.expr='-'+this.expr;
+    this.updateExprDisplay();
+  }
+  backspace(){
+    this.expr=this.expr.slice(0,-1);
+    if(this.expr==='') this.expr='0';
+    this.updateExprDisplay();
+  }
+  clear(){
+    this.expr='0';
+    this.result='0';
+    this.resetState();
+    this.updateExprDisplay();
+    document.getElementById('resultValue').textContent='0';
+    this.clearViz();
+  }
+
+  updateExprDisplay(){
+    const d=document.getElementById('exprDisplay');
+    const txt=this.expr||'0';
+    d.innerHTML='';
+    d.appendChild(document.createTextNode(txt));
+    const cursor=document.createElement('span');
+    cursor.className='cursor';
+    d.appendChild(cursor);
+  }
+
+  /* ---------- 可视化引擎 ---------- */
+  clearViz(){
+    ['lAsciiUp','lHexUp','lAsmUp','lBinUp','lStackUp','lStackDown','lBinDown','lAsmDown','lHexDown','lAsciiDown'].forEach(id=>{
+      const el=document.getElementById(id);
+      el.innerHTML=el.id.includes('Ascii')?(el.id.includes('Up')?'ASCII △':'ASCII ▽'):el.id.replace(/l|Up|Down/g,'').toUpperCase();
+    });
+    document.getElementById('aluCore').classList.remove('active');
+  }
+
+  vizChar(ch){
+    // 快速下行微动画：ASCII → HEX → ASM → BIN → STACK（简化版）
+    const asciiEl=document.getElementById('lAsciiUp');
+    const hexEl=document.getElementById('lHexUp');
+    const asmEl=document.getElementById('lAsmUp');
+    const binEl=document.getElementById('lBinUp');
+    const stackEl=document.getElementById('lStackUp');
+
+    // ASCII 块
+    const aBlock=this.mkBlock(ch,'solid');
+    asciiEl.appendChild(aBlock);
+    setTimeout(()=>{
+      aBlock.style.opacity='0.4';
+      // HEX
+      const code=ch.charCodeAt(0);
+      const hBlock=this.mkBlock('0x'+code.toString(16).toUpperCase(),'solid');
+      hexEl.appendChild(hBlock);
+      setTimeout(()=>{
+        hBlock.style.opacity='0.4';
+        // ASM
+        const ins=this.asmFor(ch);
+        const sBlock=this.mkBlock(ins,'solid',true);
+        asmEl.appendChild(sBlock);
+        setTimeout(()=>{
+          sBlock.style.opacity='0.4';
+          // BIN (8-bit ASCII)
+          const bits=code.toString(2).padStart(8,'0');
+          const bWrap=document.createElement('div');bWrap.className='bit-grid';
+          bits.split('').forEach(b=>{
+            const bb=this.mkBlock('','block mini '+(b==='1'?'solid':'hollow'));
+            bWrap.appendChild(bb);
+          });
+          binEl.appendChild(bWrap);
+          setTimeout(()=>{
+            // STACK push
+            const addr=(0x7FFF - stackEl.children.length*8).toString(16).toUpperCase();
+            const row=document.createElement('div');row.style.display='flex';row.style.alignItems='center';row.style.gap='4px';
+            row.appendChild(this.mkBlock(addr,'addr'));
+            row.appendChild(this.mkBlock('0x'+code.toString(16).toUpperCase(),'solid'));
+            stackEl.appendChild(row);
+            // 清理旧层（保留最近3个）
+            this.trimLayer(asciiEl,3);this.trimLayer(hexEl,3);this.trimLayer(asmEl,3);this.trimLayer(binEl,3);this.trimLayer(stackEl,4);
+          },80);
+        },80);
+      },80);
+    },80);
+  }
+
+  mkBlock(txt,cls,small=false){
+    const d=document.createElement('div');
+    d.className='block '+cls;
+    if(small){d.style.fontSize='8px';d.style.width='auto';d.style.padding='0 4px';}
+    d.textContent=txt;
+    return d;
+  }
+  trimLayer(el,n){
+    while(el.children.length>n){
+      if(el.firstChild && !el.firstChild.classList?.contains('bit-grid')) el.removeChild(el.firstChild);
+      else if(el.firstChild) el.removeChild(el.firstChild);
+    }
+  }
+
+  asmFor(ch){
+    const map={'+':'ADD','-':'SUB','*':'MUL','/':'DIV','%':'MOD','^':'POW'};
+    if(map[ch]) return map[ch];
+    const n=parseInt(ch);
+    if(!isNaN(n)){
+      if(this.arch==='x64') return `MOV RAX, ${n}`;
+      if(this.arch==='rv64') return `LI T0, ${n}`;
+      if(this.arch==='arm64') return `MOV X0, #${n}`;
+    }
+    if(this.arch==='x64') return `MOV AL, '${ch}'`;
+    if(this.arch==='rv64') return `LI T0, '${ch}'`;
+    return `MOV W0, '${ch}'`;
+  }
+
+  /* ---------- 计算与完整菱形动画 ---------- */
+  execute(){
+    if(!this.expr||this.expr==='0') return;
+    try{
+      const val=this.evaluate(this.expr);
+      this.result=String(val);
+      this.lastAns=this.result;
+      this.runDiamondAnim(this.expr,val);
+      this.expr='0';
+      this.updateExprDisplay();
+    }catch(e){
+      this.result='ERR';
+      this.showResult('ERROR',true);
+    }
+  }
+
+  evaluate(expr){
+    // 替换显示符号为JS运算符
+    let s=expr.replace(/×/g,'*').replace(/÷/g,'/').replace(/√/g,'Math.sqrt');
+    s=s.replace(/sin\(/g,'Math.sin(').replace(/cos\(/g,'Math.cos(').replace(/tan\(/g,'Math.tan(');
+    s=s.replace(/log\(/g,'Math.log10(').replace(/ln\(/g,'Math.log(');
+    // 程序员运算符
+    s=s.replace(/AND/g,'&').replace(/OR/g,'|').replace(/XOR/g,'^').replace(/NOT/g,'~');
+    s=s.replace(/<<</g,'<<'); // 防误
+    // 安全：仅允许白名单字符
+    if(/[^0-9+\-*/().%^&|~<<>>\s]/.test(s.replace(/Math\./g,''))) throw new Error('Invalid');
+    // 使用 Function 构造安全沙箱（仅数值计算）
+    return new Function('return ('+s+')')();
+  }
+
+  runDiamondAnim(expr,result){
+    const stages=['lAsciiUp','lHexUp','lAsmUp','lBinUp','lStackUp'];
+    const downStages=['lStackDown','lBinDown','lAsmDown','lHexDown','lAsciiDown'];
+    const alu=document.getElementById('aluCore');
+
+    // 1. 清空旧可视化
+    this.clearViz();
+
+    // 2. 构建表达式token的 △ 下行（快速级联）
+    const tokens=this.tokenize(expr);
+    tokens.forEach((tok,i)=>{
+      setTimeout(()=>{
+        this.vizTokenDown(tok);
+      },i*120);
+    });
+
+    // 3. ALU 运算（在最后一个token下行完成后）
+    const aluDelay=tokens.length*120+400;
+    setTimeout(()=>{
+      alu.classList.add('active');
+      setTimeout(()=>alu.classList.remove('active'),600);
+
+      // 4. ▽ 上行：结果从ALU返回
+      this.vizResultUp(result);
+    },aluDelay);
+  }
+
+  tokenize(expr){
+    // 简单分词：数字、运算符、括号
+    const toks=[];
+    let cur='';
+    for(let i=0;i<expr.length;i++){
+      const c=expr[i];
+      if(/[0-9.a-zA-Z_]/.test(c)||(c==='x'&&cur==='0')){
+        cur+=c;
+      }else{
+        if(cur){toks.push(cur);cur='';}
+        if(/\s/.test(c)) continue;
+        // 检查多字符运算符
+        if((c==='<'&&expr[i+1]==='<')||(c==='>'&&expr[i+1]==='>')){toks.push(c+c);i++;}
+        else if(c==='&'&&expr[i+1]==='&'){toks.push('&&');i++;}
+        else toks.push(c);
+      }
+    }
+    if(cur) toks.push(cur);
+    return toks;
+  }
+
+  vizTokenDown(tok){
+    // 与vizChar类似，但支持多位数/运算符
+    const asciiEl=document.getElementById('lAsciiUp');
+    const hexEl=document.getElementById('lHexUp');
+    const asmEl=document.getElementById('lAsmUp');
+    const binEl=document.getElementById('lBinUp');
+    const stackEl=document.getElementById('lStackUp');
+
+    // ASCII
+    const a=this.mkBlock(tok.length>3?tok.slice(0,3)+'…':tok,'solid');
+    a.style.fontSize='9px';a.style.width='auto';a.style.padding='0 4px';
+    asciiEl.appendChild(a);
+
+    setTimeout(()=>{
+      a.style.opacity='0.3';
+      // HEX of first char or value
+      let hexStr='';
+      if(/^-?\d+(\.\d+)?$/.test(tok)){
+        const n=Number(tok);
+        hexStr='0x'+Math.floor(n).toString(16).toUpperCase();
+      }else{
+        hexStr='0x'+tok.charCodeAt(0).toString(16).toUpperCase();
+      }
+      const h=this.mkBlock(hexStr,'solid',true);
+      hexEl.appendChild(h);
+
+      setTimeout(()=>{
+        h.style.opacity='0.3';
+        // ASM
+        const ins=this.asmForToken(tok);
+        const s=this.mkBlock(ins,'solid',true);
+        asmEl.appendChild(s);
+
+        setTimeout(()=>{
+          s.style.opacity='0.3';
+          // BIN (64-bit placeholder: show low 8/16 bits)
+          const bWrap=document.createElement('div');bWrap.className='bit-grid';
+          let bits='';
+          if(/^-?\d+(\.\d+)?$/.test(tok)){
+            const n=Number(tok);
+            bits=Math.abs(Math.floor(n)).toString(2).padStart(8,'0').slice(-16);
+          }else{
+            bits=tok.charCodeAt(0).toString(2).padStart(8,'0');
+          }
+          bits.split('').forEach(b=>{
+            bWrap.appendChild(this.mkBlock('','block mini '+(b==='1'?'solid':'hollow')));
+          });
+          binEl.appendChild(bWrap);
+
+          setTimeout(()=>{
+            // STACK
+            const addr=(0x7FFF - stackEl.children.length*8).toString(16).toUpperCase();
+            const row=document.createElement('div');row.style.display='flex';row.style.alignItems='center';row.style.gap='4px';
+            row.appendChild(this.mkBlock(addr,'addr'));
+            row.appendChild(this.mkBlock(hexStr,'solid'));
+            stackEl.appendChild(row);
+            this.trimLayer(asciiEl,4);this.trimLayer(hexEl,4);this.trimLayer(asmEl,4);this.trimLayer(binEl,4);this.trimLayer(stackEl,5);
+          },100);
+        },100);
+      },100);
+    },80);
+  }
+
+  asmForToken(tok){
+    const ops={'+':'ADD','-':'SUB','*':'MUL','/':'DIV','%':'MOD','^':'POW','&':'AND','|':'OR','~':'NOT','<<':'SHL','>>':'SHR'};
+    if(ops[tok]) return ops[tok];
+    if(/^-?\d+$/.test(tok)){
+      if(this.arch==='x64') return `MOV RAX, ${tok}`;
+      if(this.arch==='rv64') return `LI T0, ${tok}`;
+      return `MOV X0, #${tok}`;
+    }
+    return `DB "${tok}"`;
+  }
+
+  vizResultUp(val){
+    const stages=['lStackDown','lBinDown','lAsmDown','lHexDown','lAsciiDown'];
+    const resultEl=document.getElementById('resultValue');
+    const pit=document.getElementById('resultPit');
+
+    let delay=0;
+    const step=180;
+
+    // STACK (结果在栈中)
+    setTimeout(()=>{
+      const el=document.getElementById('lStackDown');
+      const row=document.createElement('div');row.style.display='flex';row.style.alignItems='center';row.style.gap='4px';
+      row.appendChild(this.mkBlock('RSP','addr'));
+      row.appendChild(this.mkBlock(String(val).slice(0,8),'solid'));
+      el.appendChild(row);
+    },delay); delay+=step;
+
+    // BIN
+    setTimeout(()=>{
+      const el=document.getElementById('lBinDown');
+      const bWrap=document.createElement('div');bWrap.className='bit-grid';
+      const n=Number(val);
+      const bits=Math.abs(Math.floor(isNaN(n)?0:n)).toString(2).padStart(64,'0');
+      // 显示8组8位，用微型方块
+      for(let i=0;i<64;i++){
+        const bit=bits[i];
+        bWrap.appendChild(this.mkBlock('','block mini '+(bit==='1'?'solid':'hollow')));
+      }
+      el.appendChild(bWrap);
+    },delay); delay+=step;
+
+    // ASM
+    setTimeout(()=>{
+      const el=document.getElementById('lAsmDown');
+      let ins='';
+      if(this.arch==='x64') ins=`MOV RAX, ${val}`;
+      else if(this.arch==='rv64') ins=`LI A0, ${val}`;
+      else ins=`MOV X0, #${val}`;
+      el.appendChild(this.mkBlock(ins,'solid',true));
+    },delay); delay+=step;
+
+    // HEX
+    setTimeout(()=>{
+      const el=document.getElementById('lHexDown');
+      const n=Number(val);
+      const hex='0x'+Math.floor(isNaN(n)?0:n).toString(16).toUpperCase();
+      el.appendChild(this.mkBlock(hex,'solid',true));
+    },delay); delay+=step;
+
+    // ASCII ▽ (最终结果字符)
+    setTimeout(()=>{
+      const el=document.getElementById('lAsciiDown');
+      const txt=String(val);
+      txt.split('').forEach((ch,i)=>{
+        const b=this.mkBlock(ch,'solid');
+        b.style.animation='dropIn 0.4s ease '+i*0.05+'s both';
+        el.appendChild(b);
+      });
+    },delay); delay+=step+200;
+
+    // 落入结果坑
+    setTimeout(()=>{
+      this.showResult(val);
+    },delay);
+  }
+
+  showResult(v,isErr=false){
+    const el=document.getElementById('resultValue');
+    el.textContent=v;
+    el.style.color=isErr? 'var(--amber)':'var(--green)';
+    el.classList.remove('drop-in');
+    void el.offsetWidth; // reflow
+    el.classList.add('drop-in');
+  }
+}
+
+/* 启动 */
+window.addEventListener('DOMContentLoaded',()=>new Calcore());
+</script>
+</body>
+</html>

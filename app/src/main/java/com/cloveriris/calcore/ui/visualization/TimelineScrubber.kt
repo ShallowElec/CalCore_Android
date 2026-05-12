@@ -28,8 +28,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.TerminalGreen
-import com.cloveriris.calcore.ui.theme.TerminalBackground
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * 时间轴控制条
@@ -51,6 +50,7 @@ fun TimelineScrubber(
     onRestart: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     val progress = if (totalTimeMs > 0) currentTimeMs.toFloat() / totalTimeMs else 0f
 
     Column(
@@ -65,13 +65,13 @@ fun TimelineScrubber(
         ) {
             Text(
                 text = formatTime(currentTimeMs),
-                color = TerminalGreen,
+                color = viz.dataPrimary,
                 fontSize = 12.sp,
                 fontFamily = FontFamily.Monospace
             )
             Text(
                 text = formatTime(totalTimeMs),
-                color = Color(0xFF8B949E),
+                color = viz.textMuted,
                 fontSize = 12.sp,
                 fontFamily = FontFamily.Monospace
             )
@@ -83,9 +83,9 @@ fun TimelineScrubber(
             onValueChange = onScrub,
             modifier = Modifier.fillMaxWidth(),
             colors = SliderDefaults.colors(
-                thumbColor = TerminalGreen,
-                activeTrackColor = TerminalGreen,
-                inactiveTrackColor = Color(0xFF1F1F1F)
+                thumbColor = viz.dataPrimary,
+                activeTrackColor = viz.dataPrimary,
+                inactiveTrackColor = viz.surface
             )
         )
 
@@ -98,7 +98,7 @@ fun TimelineScrubber(
             IconButton(
                 onClick = onRestart,
                 colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = Color(0xFF8B949E)
+                    contentColor = viz.textMuted
                 )
             ) {
                 Icon(
@@ -111,7 +111,7 @@ fun TimelineScrubber(
             IconButton(
                 onClick = onPlayPause,
                 colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = TerminalGreen
+                    contentColor = viz.dataPrimary
                 )
             ) {
                 Icon(

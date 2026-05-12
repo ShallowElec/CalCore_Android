@@ -37,10 +37,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.TerminalAmber
-import com.cloveriris.calcore.ui.theme.TerminalBackground
-import com.cloveriris.calcore.ui.theme.TerminalGray
-import com.cloveriris.calcore.ui.theme.TerminalGreen
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * L5 运算符栈可视化
@@ -56,15 +53,16 @@ fun OperatorStackView(
     stack: List<String>,
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(TerminalBackground)
+            .background(viz.stageBg)
             .padding(12.dp)
     ) {
         Text(
             text = "L5: OPERATOR STACK",
-            color = TerminalGray,
+            color = viz.textMuted,
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
             letterSpacing = 2.sp,
@@ -74,7 +72,7 @@ fun OperatorStackView(
         if (stack.isEmpty()) {
             Text(
                 text = "Empty stack",
-                color = TerminalGray.copy(alpha = 0.5f),
+                color = viz.textMuted.copy(alpha = 0.5f),
                 fontSize = 12.sp,
                 fontFamily = FontFamily.Monospace
             )
@@ -106,7 +104,7 @@ fun OperatorStackView(
                                 modifier = Modifier
                                     .widthIn(min = 24.dp)
                                     .height(1.dp)
-                                    .background(TerminalGreen.copy(alpha = 0.2f))
+                                    .background(viz.dataPrimary.copy(alpha = 0.2f))
                             )
                         }
                     }
@@ -150,9 +148,10 @@ private fun StackItem(
             animationSpec = tween(300)
         ) + fadeOut(tween(200))
     ) {
-        val borderColor = if (isTop) TerminalAmber else TerminalGreen
-        val bgColor = if (isTop) TerminalGreen.copy(alpha = 0.15f) else TerminalGreen
-        val textColor = if (isTop) TerminalAmber else Color.Black
+        val innerViz = com.cloveriris.calcore.ui.theme.LocalVisualizationColors.current
+        val borderColor = if (isTop) innerViz.accent else innerViz.dataPrimary
+        val bgColor = if (isTop) innerViz.dataPrimary.copy(alpha = 0.15f) else innerViz.dataPrimary
+        val textColor = if (isTop) innerViz.accent else Color.Black
 
         Box(
             modifier = Modifier

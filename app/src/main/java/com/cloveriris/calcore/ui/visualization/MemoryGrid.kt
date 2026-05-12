@@ -27,10 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.presentation.visualization.MemoryPointerAnimationState
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.SkyBlue
-import com.cloveriris.calcore.ui.theme.TerminalAmber
-import com.cloveriris.calcore.ui.theme.TerminalGreen
-import com.cloveriris.calcore.ui.theme.TerminalGray
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * 内存网格可视化（L4 内存布局 + L6 指针寻址）
@@ -63,6 +60,7 @@ fun MemoryGrid(
     pointerLinks: List<Pair<Int, Int>> = emptyList(),
     pointerAnimation: MemoryPointerAnimationState = MemoryPointerAnimationState()
 ) {
+    val viz = LocalVisualizationColors.current
     val textMeasurer = rememberTextMeasurer()
     // 固定行数：至少 4 行，形成稳定的内存 dump 视图
     val rows = 4.coerceAtLeast((cells.size + columns - 1) / columns)
@@ -93,7 +91,7 @@ fun MemoryGrid(
         val gap = 2.dp.toPx()
 
         // 绘制区域标签条（STACK / HEAP / DATA / CONST）
-        drawRegionLabels(cells, rows, columns, addrColWidth, cellWidth, cellHeight, gap, textMeasurer)
+        drawRegionLabels(cells, rows, columns, addrColWidth, cellWidth, cellHeight, gap, textMeasurer, viz)
 
         // 绘制网格背景线（所有单元格的基础网格）
         drawBaseGrid(rows, columns, addrColWidth, cellWidth, cellHeight, gap)
@@ -122,7 +120,7 @@ fun MemoryGrid(
             val fillColor = when {
                 !cell.isAllocated -> Color.Transparent
                 cell.isPointer -> Color.Transparent
-                else -> TerminalGreen
+                else -> viz.dataPrimary
             }
 
             // 写入脉冲：先白色闪光，再渐绿
@@ -149,7 +147,7 @@ fun MemoryGrid(
             // 空心方块边框（指针语义）
             if (cell.isPointer) {
                 drawRect(
-                    color = TerminalGreen,
+                    color = viz.dataPrimary,
                     topLeft = Offset(x, y),
                     size = Size(cellWidth - gap, cellHeight - gap),
                     style = Stroke(width = 1.5f.dp.toPx())
@@ -159,7 +157,7 @@ fun MemoryGrid(
             // 写入脉冲边框（绿色发光）
             if (cell.isWriting && writePulse.value > 0.3f) {
                 drawRect(
-                    color = TerminalGreen.copy(alpha = writeGlowAlpha * 0.8f),
+                    color = viz.dataPrimary.copy(alpha = writeGlowAlpha * 0.8f),
                     topLeft = Offset(x - 1.dp.toPx(), y - 1.dp.toPx()),
                     size = Size(cellWidth - gap + 2.dp.toPx(), cellHeight - gap + 2.dp.toPx()),
                     style = Stroke(width = 2.dp.toPx())
@@ -169,9 +167,9 @@ fun MemoryGrid(
             // 数值文字
             val valueText = cell.value.toString(16).uppercase().padStart(2, '0')
             val textColor = when {
-                cell.isPointer -> TerminalGreen
+                cell.isPointer -> viz.dataPrimary
                 cell.isAllocated -> Color.Black
-                else -> TerminalGray.copy(alpha = 0.3f)
+                else -> viz.textMuted.copy(alpha = 0.3f)
             }
             val valueLayout = textMeasurer.measure(
                 valueText,
@@ -189,7 +187,7 @@ fun MemoryGrid(
             if (col == 0) {
                 val addrLayout = textMeasurer.measure(
                     cell.address,
-                    TextStyle(color = TerminalGray.copy(alpha = 0.5f), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    TextStyle(color = viz.textMuted.copy(alpha = 0.5f), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                 )
                 drawText(addrLayout, topLeft = Offset(0f, y + (cellHeight - gap - addrLayout.size.height) / 2))
             }
@@ -198,7 +196,7 @@ fun MemoryGrid(
             if (cursorAlpha > 0.01f) {
                 val strokeWidth = 2.dp.toPx()
                 drawRect(
-                    color = TerminalAmber.copy(alpha = cursorAlpha * 0.8f),
+                    color = viz.accent.copy(alpha = cursorAlpha * 0.8f),
                     topLeft = Offset(x - 1.dp.toPx(), y - 1.dp.toPx()),
                     size = Size(cellWidth - gap + 2.dp.toPx(), cellHeight - gap + 2.dp.toPx()),
                     style = Stroke(width = strokeWidth)
@@ -213,7 +211,7 @@ fun MemoryGrid(
                     lineTo(triCenterX + halfW, triTop)
                     close()
                 }
-                drawPath(path = triangle, color = TerminalAmber.copy(alpha = cursorAlpha))
+                drawPath(path = triangle, color = viz.accent.copy(alpha = cursorAlpha))
             }
         }
 
@@ -225,7 +223,7 @@ fun MemoryGrid(
             val py = prow * cellHeight + gap / 2 + 18.dp.toPx()
             val tailAlpha = (1f - cursorAnim.value) * 0.3f
             drawRect(
-                color = TerminalAmber.copy(alpha = tailAlpha),
+                color = viz.accent.copy(alpha = tailAlpha),
                 topLeft = Offset(px - 1.dp.toPx(), py - 1.dp.toPx()),
                 size = Size(cellWidth - gap + 2.dp.toPx(), cellHeight - gap + 2.dp.toPx()),
                 style = Stroke(width = 1.dp.toPx())
@@ -235,7 +233,7 @@ fun MemoryGrid(
         // 静态指针虚线箭头
         pointerLinks.forEach { (sourceIndex, targetIndex) ->
             if (sourceIndex !in cells.indices || targetIndex !in cells.indices) return@forEach
-            drawPointerArrow(sourceIndex, targetIndex, columns, addrColWidth, cellWidth, cellHeight, gap, TerminalGreen.copy(alpha = 0.5f))
+            drawPointerArrow(sourceIndex, targetIndex, columns, addrColWidth, cellWidth, cellHeight, gap, viz.dataPrimary.copy(alpha = 0.5f))
         }
 
         // 动态指针连线生长动画
@@ -249,7 +247,7 @@ fun MemoryGrid(
             if (sIdx >= 0 && tIdx >= 0) {
                 drawGrowingPointerArrow(
                     sIdx, tIdx, columns, addrColWidth, cellWidth, cellHeight, gap,
-                    TerminalGreen, pointerAnimation.progress
+                    viz.dataPrimary, pointerAnimation.progress
                 )
             }
         }
@@ -260,17 +258,18 @@ private fun DrawScope.drawRegionLabels(
     cells: List<MemoryCellVisual>,
     rows: Int, columns: Int,
     addrColWidth: Float, cellWidth: Float, cellHeight: Float, gap: Float,
-    textMeasurer: TextMeasurer
+    textMeasurer: TextMeasurer,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme
 ) {
     if (cells.isEmpty()) return
 
     // 区域颜色映射
     val regionColor: (String) -> Color = { tag ->
         when (tag) {
-            "STACK" -> TerminalGray.copy(alpha = 0.6f)
-            "HEAP" -> SkyBlue.copy(alpha = 0.7f)
-            "CONST" -> TerminalAmber.copy(alpha = 0.7f)
-            else -> TerminalGreen.copy(alpha = 0.6f) // DATA
+            "STACK" -> viz.textMuted.copy(alpha = 0.6f)
+            "HEAP" -> viz.dataSecondary.copy(alpha = 0.7f)
+            "CONST" -> viz.accent.copy(alpha = 0.7f)
+            else -> viz.dataPrimary.copy(alpha = 0.6f) // DATA
         }
     }
 

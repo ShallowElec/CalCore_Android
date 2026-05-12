@@ -42,9 +42,19 @@ fun CalcoreTheme(
         AppTheme.CALCORE_LIGHT -> CalcoreLightScheme
     }
 
+    val vizScheme = when (appTheme) {
+        AppTheme.SYSTEM_DYNAMIC -> dynamicVisualizationScheme(darkTheme)
+        AppTheme.CALCORE_DARK -> TerminalVisualizationScheme
+        AppTheme.CALCORE_LIGHT -> LightVisualizationScheme
+    }
+
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
-        content = content
+        content = {
+            ProvideVisualizationColors(scheme = vizScheme) {
+                content()
+            }
+        }
     )
 }

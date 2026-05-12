@@ -26,10 +26,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.SkyBlue
-import com.cloveriris.calcore.ui.theme.TerminalAmber
-import com.cloveriris.calcore.ui.theme.TerminalGreen
-import com.cloveriris.calcore.ui.theme.TerminalGray
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * 64-bit 位格可视化组件
@@ -51,6 +48,7 @@ fun BitGrid(
     highlights: Set<Int> = emptySet(),
     label: String = ""
 ) {
+    val viz = LocalVisualizationColors.current
     val textMeasurer = rememberTextMeasurer()
 
     // 位翻转动画状态：每个索引对应一个 Animatable（0f=正常, 1f=翻转峰值）
@@ -86,8 +84,8 @@ fun BitGrid(
         }
     ) {
         when (layout) {
-            BitGridLayout.GRID_8X8 -> drawBitGrid8x8(bits, labels, textMeasurer, highlights, flipAnims)
-            BitGridLayout.BAR_1X64 -> drawBitGrid1x64(bits, labels, textMeasurer, highlights, label, flipAnims)
+            BitGridLayout.GRID_8X8 -> drawBitGrid8x8(bits, labels, textMeasurer, highlights, flipAnims, viz)
+            BitGridLayout.BAR_1X64 -> drawBitGrid1x64(bits, labels, textMeasurer, highlights, label, flipAnims, viz)
         }
     }
 }
@@ -97,7 +95,8 @@ private fun DrawScope.drawBitGrid8x8(
     labels: List<String>?,
     textMeasurer: TextMeasurer,
     highlights: Set<Int>,
-    flipAnims: Map<Int, Animatable<Float, *>>
+    flipAnims: Map<Int, Animatable<Float, *>>,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme
 ) {
     val cellSize = size.width / 8f
     val gap = 2.dp.toPx()
@@ -130,7 +129,7 @@ private fun DrawScope.drawBitGrid8x8(
         }
 
         drawRect(
-            color = if (bit) TerminalGreen else Color(0xFF1F1F1F),
+            color = if (bit) viz.dataPrimary else viz.surface,
             topLeft = Offset(sx, sy),
             size = Size(scaledCell, scaledCell)
         )
@@ -140,7 +139,7 @@ private fun DrawScope.drawBitGrid8x8(
         val textLayout = textMeasurer.measure(
             bitText,
             TextStyle(
-                color = if (bit) Color.Black else Color(0xFF8B949E),
+                color = if (bit) Color.Black else viz.textMuted,
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace
             )
@@ -156,7 +155,7 @@ private fun DrawScope.drawBitGrid8x8(
         // L2 高亮边框（琥珀色 2dp）
         if (i in highlights) {
             drawRect(
-                color = TerminalAmber,
+                color = viz.accent,
                 topLeft = Offset(x - 1.dp.toPx(), y - 1.dp.toPx()),
                 size = Size(actualCell + 2.dp.toPx(), actualCell + 2.dp.toPx()),
                 style = Stroke(width = 2.dp.toPx())
@@ -166,7 +165,7 @@ private fun DrawScope.drawBitGrid8x8(
         // 翻转时的脉冲边框
         if (flipProgress > 0.01f) {
             drawRect(
-                color = TerminalGreen.copy(alpha = flipProgress * 0.8f),
+                color = viz.dataPrimary.copy(alpha = flipProgress * 0.8f),
                 topLeft = Offset(sx - 1.dp.toPx(), sy - 1.dp.toPx()),
                 size = Size(scaledCell + 2.dp.toPx(), scaledCell + 2.dp.toPx()),
                 style = Stroke(width = 1.5f.dp.toPx())
@@ -181,7 +180,8 @@ private fun DrawScope.drawBitGrid1x64(
     textMeasurer: TextMeasurer,
     highlights: Set<Int>,
     label: String,
-    flipAnims: Map<Int, Animatable<Float, *>>
+    flipAnims: Map<Int, Animatable<Float, *>>,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme
 ) {
     val showIeee754 = label.contains("IEEE 754", ignoreCase = true) || label.contains("DOUBLE", ignoreCase = true)
     val topPadding = if (showIeee754 || highlights.isNotEmpty()) 18.dp.toPx() else 0f
@@ -193,7 +193,7 @@ private fun DrawScope.drawBitGrid1x64(
 
     // IEEE 754 分区标注
     if (showIeee754) {
-        drawIeee754Labels(cellWidth, topPadding, textMeasurer)
+        drawIeee754Labels(cellWidth, topPadding, textMeasurer, viz)
     }
 
     for (i in 0 until 64) {
@@ -218,7 +218,7 @@ private fun DrawScope.drawBitGrid1x64(
         }
 
         drawRect(
-            color = if (bit) TerminalGreen else Color(0xFF1F1F1F),
+            color = if (bit) viz.dataPrimary else viz.surface,
             topLeft = Offset(x, sy),
             size = Size(actualWidth, scaledHeight)
         )
@@ -237,14 +237,14 @@ private fun DrawScope.drawBitGrid1x64(
             }
             drawPath(
                 path = triangle,
-                color = TerminalAmber
+                color = viz.accent
             )
         }
 
         // 翻转时的脉冲边框
         if (flipProgress > 0.01f) {
             drawRect(
-                color = TerminalGreen.copy(alpha = flipProgress * 0.7f),
+                color = viz.dataPrimary.copy(alpha = flipProgress * 0.7f),
                 topLeft = Offset(x - 0.5f.dp.toPx(), sy - 0.5f.dp.toPx()),
                 size = Size(actualWidth + 1.dp.toPx(), scaledHeight + 1.dp.toPx()),
                 style = Stroke(width = 1.dp.toPx())
@@ -256,13 +256,14 @@ private fun DrawScope.drawBitGrid1x64(
 private fun DrawScope.drawIeee754Labels(
     cellWidth: Float,
     topPadding: Float,
-    textMeasurer: TextMeasurer
+    textMeasurer: TextMeasurer,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme
 ) {
     // Sign: bit 0 (1 bit)
     val signCenter = cellWidth * 0.5f
     val signLayout = textMeasurer.measure(
         "S",
-        TextStyle(color = TerminalAmber, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        TextStyle(color = viz.accent, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
     )
     drawText(signLayout, topLeft = Offset(signCenter - signLayout.size.width / 2, 0f))
 
@@ -270,7 +271,7 @@ private fun DrawScope.drawIeee754Labels(
     val expCenter = cellWidth * 1 + cellWidth * 11 / 2f
     val expLayout = textMeasurer.measure(
         "E×11",
-        TextStyle(color = SkyBlue, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        TextStyle(color = viz.dataSecondary, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
     )
     drawText(expLayout, topLeft = Offset(expCenter - expLayout.size.width / 2, 0f))
 
@@ -278,19 +279,19 @@ private fun DrawScope.drawIeee754Labels(
     val mantCenter = cellWidth * 12 + cellWidth * 52 / 2f
     val mantLayout = textMeasurer.measure(
         "M×52",
-        TextStyle(color = TerminalGreen, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        TextStyle(color = viz.dataPrimary, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
     )
     drawText(mantLayout, topLeft = Offset(mantCenter - mantLayout.size.width / 2, 0f))
 
     // 底部分隔线提示
     drawLine(
-        color = TerminalAmber.copy(alpha = 0.5f),
+        color = viz.accent.copy(alpha = 0.5f),
         start = Offset(cellWidth, topPadding - 2.dp.toPx()),
         end = Offset(cellWidth, topPadding),
         strokeWidth = 1.dp.toPx()
     )
     drawLine(
-        color = SkyBlue.copy(alpha = 0.5f),
+        color = viz.dataSecondary.copy(alpha = 0.5f),
         start = Offset(cellWidth * 12, topPadding - 2.dp.toPx()),
         end = Offset(cellWidth * 12, topPadding),
         strokeWidth = 1.dp.toPx()

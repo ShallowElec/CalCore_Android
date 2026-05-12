@@ -31,11 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.domain.model.AnimationAction
 import com.cloveriris.calcore.presentation.visualization.LogicGateState
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.SkyBlue
-import com.cloveriris.calcore.ui.theme.TerminalBackground
-import com.cloveriris.calcore.ui.theme.TerminalGray
-import com.cloveriris.calcore.ui.theme.TerminalGreen
-import com.cloveriris.calcore.ui.theme.TerminalAmber
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * 逻辑门网格可视化（L1: Boolean Algebra）
@@ -47,6 +43,7 @@ fun LogicGateGrid(
     state: LogicGateState,
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     val textMeasurer = rememberTextMeasurer()
     val infiniteTransition = rememberInfiniteTransition(label = "gate-flicker")
     val flickerAlpha by infiniteTransition.animateFloat(
@@ -61,12 +58,12 @@ fun LogicGateGrid(
 
     Column(
         modifier = modifier
-            .background(TerminalBackground)
+            .background(viz.stageBg)
             .padding(8.dp)
     ) {
         Text(
             text = "L1: BOOLEAN ALGEBRA",
-            color = TerminalGray,
+            color = viz.textMuted,
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
             modifier = Modifier.padding(bottom = 8.dp)
@@ -89,24 +86,24 @@ fun LogicGateGrid(
             val gateY = (size.height - gateHeight) / 2
 
             val gateColor = when (state.gateType) {
-                AnimationAction.LogicGateType.AND -> TerminalGreen
-                AnimationAction.LogicGateType.OR -> TerminalAmber
-                AnimationAction.LogicGateType.XOR -> SkyBlue
-                AnimationAction.LogicGateType.NOT -> TerminalGray
+                AnimationAction.LogicGateType.AND -> viz.dataPrimary
+                AnimationAction.LogicGateType.OR -> viz.accent
+                AnimationAction.LogicGateType.XOR -> viz.dataSecondary
+                AnimationAction.LogicGateType.NOT -> viz.textMuted
             }
 
             // 输入位（左）
             for (i in 0 until bitCount) {
                 val bit = state.leftBits.getOrElse(i) { false }
                 val y = gateY + i * (bitSize + bitGap)
-                drawBitSquare(leftX, y, bitSize, bit)
+                drawBitSquare(leftX, y, bitSize, bit, viz)
             }
 
             // 输出位（右）
             for (i in 0 until bitCount) {
                 val bit = state.resultBits.getOrElse(i) { false }
                 val y = gateY + i * (bitSize + bitGap)
-                drawBitSquare(rightX, y, bitSize, bit)
+                drawBitSquare(rightX, y, bitSize, bit, viz)
             }
 
             // 逻辑门中央大方框
@@ -151,13 +148,13 @@ fun LogicGateGrid(
 
                 // 基线（暗色）
                 drawLine(
-                    color = TerminalGreen.copy(alpha = 0.12f),
+                    color = viz.dataPrimary.copy(alpha = 0.12f),
                     start = leftLineStart,
                     end = leftLineEnd,
                     strokeWidth = 1.dp.toPx()
                 )
                 drawLine(
-                    color = TerminalGreen.copy(alpha = 0.12f),
+                    color = viz.dataPrimary.copy(alpha = 0.12f),
                     start = rightLineStart,
                     end = rightLineEnd,
                     strokeWidth = 1.dp.toPx()
@@ -167,20 +164,20 @@ fun LogicGateGrid(
                 if (progress > 0f) {
                     // 左输入 → 逻辑门（progress 0.0~0.5）
                     val leftProgress = (progress * 2f).coerceIn(0f, 1f)
-                    drawFlowLine(leftLineStart, leftLineEnd, leftProgress)
+                    drawFlowLine(leftLineStart, leftLineEnd, leftProgress, viz)
 
                     // 逻辑门 → 右输出（progress 0.5~1.0）
                     val rightProgress = ((progress - 0.5f) * 2f).coerceIn(0f, 1f)
-                    drawFlowLine(rightLineStart, rightLineEnd, rightProgress)
+                    drawFlowLine(rightLineStart, rightLineEnd, rightProgress, viz)
                 }
             }
         }
     }
 }
 
-private fun DrawScope.drawBitSquare(x: Float, y: Float, size: Float, bit: Boolean) {
+private fun DrawScope.drawBitSquare(x: Float, y: Float, size: Float, bit: Boolean, viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme) {
     drawRect(
-        color = if (bit) TerminalGreen else Color(0xFF1F1F1F),
+        color = if (bit) viz.dataPrimary else viz.surface,
         topLeft = Offset(x, y),
         size = Size(size, size)
     )
@@ -188,7 +185,7 @@ private fun DrawScope.drawBitSquare(x: Float, y: Float, size: Float, bit: Boolea
     // 不在这里绘制文字以保持一致性，保持简洁小方块
 }
 
-private fun DrawScope.drawFlowLine(start: Offset, end: Offset, progress: Float) {
+private fun DrawScope.drawFlowLine(start: Offset, end: Offset, progress: Float, viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme) {
     if (progress <= 0f) return
     val currentX = start.x + (end.x - start.x) * progress
     val currentY = start.y + (end.y - start.y) * progress
@@ -203,8 +200,8 @@ private fun DrawScope.drawFlowLine(start: Offset, end: Offset, progress: Float) 
         drawLine(
             brush = Brush.linearGradient(
                 colors = listOf(
-                    TerminalGreen.copy(alpha = 0.05f),
-                    TerminalGreen.copy(alpha = 0.9f)
+                    viz.dataPrimary.copy(alpha = 0.05f),
+                    viz.dataPrimary.copy(alpha = 0.9f)
                 ),
                 start = segStart,
                 end = head

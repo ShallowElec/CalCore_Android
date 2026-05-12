@@ -34,9 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.presentation.visualization.DisplayBufferVisual
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.TerminalBackground
-import com.cloveriris.calcore.ui.theme.TerminalGray
-import com.cloveriris.calcore.ui.theme.TerminalGreen
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * L8 显示缓冲区可视化
@@ -48,6 +46,7 @@ fun DisplayBufferView(
     buffer: DisplayBufferVisual?,
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     val infiniteTransition = rememberInfiniteTransition(label = "bufferAnim")
     val cursorAlpha by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -62,12 +61,12 @@ fun DisplayBufferView(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(TerminalBackground)
+            .background(viz.stageBg)
             .padding(12.dp)
     ) {
         Text(
             text = "L8: DISPLAY BUFFER",
-            color = TerminalGray,
+            color = viz.textMuted,
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
             letterSpacing = 2.sp,
@@ -85,8 +84,8 @@ fun DisplayBufferView(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .border(1.dp, TerminalGray, RoundedCornerShape(8.dp))
-                    .background(Color(0xFF0A0A0A), RoundedCornerShape(8.dp))
+                    .border(1.dp, viz.textMuted, RoundedCornerShape(8.dp))
+                    .background(viz.stageBg, RoundedCornerShape(8.dp))
                     .padding(12.dp)
             ) {
                 // LCD 局部扫描线 overlay
@@ -95,7 +94,7 @@ fun DisplayBufferView(
                     val spacing = size.height / lineCount
                     for (i in 0..lineCount) {
                         drawLine(
-                            color = TerminalGreen.copy(alpha = 0.025f),
+                            color = viz.dataPrimary.copy(alpha = 0.025f),
                             start = Offset(0f, i * spacing),
                             end = Offset(size.width, i * spacing),
                             strokeWidth = 0.5f.dp.toPx()
@@ -122,21 +121,21 @@ fun DisplayBufferView(
                             // 除最后一个字符外的文本
                             Text(
                                 text = text.take(text.length - 1),
-                                color = TerminalGreen,
+                                color = viz.dataPrimary,
                                 fontSize = 14.sp,
                                 fontFamily = FontFamily.Monospace
                             )
                             // 最后一个字符带淡入
                             Text(
                                 text = text.last().toString(),
-                                color = TerminalGreen.copy(alpha = lastCharAlpha),
+                                color = viz.dataPrimary.copy(alpha = lastCharAlpha),
                                 fontSize = 14.sp,
                                 fontFamily = FontFamily.Monospace
                             )
                         } else {
                             Text(
                                 text = text,
-                                color = TerminalGreen,
+                                color = viz.dataPrimary,
                                 fontSize = 14.sp,
                                 fontFamily = FontFamily.Monospace
                             )
@@ -155,7 +154,7 @@ fun DisplayBufferView(
                                 .fillMaxWidth()
                                 .height(2.dp)
                                 .alpha(cursorAlpha)
-                                .background(TerminalGreen)
+                                .background(viz.dataPrimary)
                         )
                     }
                 }
@@ -166,6 +165,7 @@ fun DisplayBufferView(
 
 @Composable
 private fun DataInflowIndicator() {
+    val viz = LocalVisualizationColors.current
     val infiniteTransition = rememberInfiniteTransition(label = "inflowAnim")
     val dotAlphas = List(3) { index ->
         infiniteTransition.animateFloat(
@@ -188,12 +188,12 @@ private fun DataInflowIndicator() {
                 modifier = Modifier
                     .size(4.dp)
                     .alpha(alpha.value)
-                    .background(TerminalGreen, CircleShape)
+                    .background(viz.dataPrimary, CircleShape)
             )
         }
         Text(
             text = "▶",
-            color = TerminalGreen,
+            color = viz.dataPrimary,
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace
         )

@@ -25,10 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.domain.model.AnimationAction
 import com.cloveriris.calcore.presentation.visualization.StackAnimationState
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.TerminalAmber
-import com.cloveriris.calcore.ui.theme.TerminalBackground
-import com.cloveriris.calcore.ui.theme.TerminalGreen
-import com.cloveriris.calcore.ui.theme.TerminalGray
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * 栈可视化组件（L4 堆栈搬运过程）
@@ -61,6 +58,7 @@ fun StackView(
     stackAnimation: StackAnimationState = StackAnimationState(),
     spRegisterName: String = "SP"
 ) {
+    val viz = LocalVisualizationColors.current
     val textMeasurer = rememberTextMeasurer()
     val animProgress = remember(stackAnimation) {
         Animatable(stackAnimation.progress)
@@ -87,19 +85,19 @@ fun StackView(
 
         // 绘制寄存器区背景（PUSH 时方块从此滑出，POP 时方块滑入此处）
         drawRect(
-            color = TerminalBackground,
+            color = viz.stageBg,
             topLeft = Offset(0f, 0f),
             size = Size(frameWidth, regAreaHeight)
         )
         drawRect(
-            color = TerminalGray.copy(alpha = 0.3f),
+            color = viz.textMuted.copy(alpha = 0.3f),
             topLeft = Offset(0f, 0f),
             size = Size(frameWidth, regAreaHeight),
             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
         )
         val regLabel = textMeasurer.measure(
             "REG / ALU",
-            TextStyle(color = TerminalGray.copy(alpha = 0.5f), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+            TextStyle(color = viz.textMuted.copy(alpha = 0.5f), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         )
         drawText(regLabel, topLeft = Offset(4.dp.toPx(), 2.dp.toPx()))
 
@@ -117,7 +115,7 @@ fun StackView(
                 if (trailY > regAreaHeight - rowHeight) {
                     val trailAlpha = alpha * (1f - t / (trailSteps + 1f)) * 0.25f
                     drawRect(
-                        color = TerminalGreen.copy(alpha = trailAlpha),
+                        color = viz.dataPrimary.copy(alpha = trailAlpha),
                         topLeft = Offset(0f, trailY),
                         size = Size(frameWidth, rowHeight)
                     )
@@ -131,7 +129,8 @@ fun StackView(
                 value = stackAnimation.frameValue,
                 isTop = true,
                 alpha = alpha,
-                textMeasurer = textMeasurer
+                textMeasurer = textMeasurer,
+                viz = viz
             )
         }
 
@@ -150,7 +149,7 @@ fun StackView(
                 if (trailY < startY + rowHeight) {
                     val trailAlpha = alpha * (1f - t / (trailSteps + 1f)) * 0.25f
                     drawRect(
-                        color = TerminalGreen.copy(alpha = trailAlpha),
+                        color = viz.dataPrimary.copy(alpha = trailAlpha),
                         topLeft = Offset(0f, trailY),
                         size = Size(frameWidth, rowHeight)
                     )
@@ -164,7 +163,8 @@ fun StackView(
                 value = stackAnimation.frameValue,
                 isTop = true,
                 alpha = alpha,
-                textMeasurer = textMeasurer
+                textMeasurer = textMeasurer,
+                viz = viz
             )
         }
 
@@ -185,7 +185,8 @@ fun StackView(
                 value = frame.value,
                 isTop = isTop,
                 alpha = 1f,
-                textMeasurer = textMeasurer
+                textMeasurer = textMeasurer,
+                viz = viz
             )
         }
 
@@ -196,7 +197,7 @@ fun StackView(
             stackStartY - rowHeight * 0.2f
         }
         val spText = if (spValue.isNotEmpty()) "▼ $spRegisterName = $spValue" else "▼ $spRegisterName"
-        val spColor = if (spHighlighted) TerminalAmber else TerminalGray
+        val spColor = if (spHighlighted) viz.accent else viz.textMuted
         val spLayout = textMeasurer.measure(
             spText,
             TextStyle(color = spColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
@@ -213,7 +214,7 @@ fun StackView(
                 lineTo(ax + 6.dp.toPx(), ay + 4.dp.toPx())
                 close()
             }
-            drawPath(path = arrowPath, color = TerminalAmber.copy(alpha = 0.6f + 0.4f * animProgress.value))
+            drawPath(path = arrowPath, color = viz.accent.copy(alpha = 0.6f + 0.4f * animProgress.value))
         }
     }
 }
@@ -225,15 +226,16 @@ private fun DrawScope.drawStackBlock(
     value: String,
     isTop: Boolean,
     alpha: Float,
-    textMeasurer: TextMeasurer
+    textMeasurer: TextMeasurer,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme
 ) {
     val bgColor = when {
-        isTop -> TerminalGreen.copy(alpha = 0.2f * alpha)
-        else -> Color(0xFF1F1F1F).copy(alpha = alpha)
+        isTop -> viz.dataPrimary.copy(alpha = 0.2f * alpha)
+        else -> viz.surface.copy(alpha = alpha)
     }
     val borderColor = when {
-        isTop -> TerminalGreen.copy(alpha = 0.9f * alpha)
-        else -> TerminalGray.copy(alpha = 0.3f * alpha)
+        isTop -> viz.dataPrimary.copy(alpha = 0.9f * alpha)
+        else -> viz.textMuted.copy(alpha = 0.3f * alpha)
     }
 
     // 背景
@@ -255,7 +257,7 @@ private fun DrawScope.drawStackBlock(
     val labelLayout = textMeasurer.measure(
         label,
         TextStyle(
-            color = if (isTop) TerminalGreen.copy(alpha = alpha) else TerminalGray.copy(alpha = 0.8f * alpha),
+            color = if (isTop) viz.dataPrimary.copy(alpha = alpha) else viz.textMuted.copy(alpha = 0.8f * alpha),
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace
         )
@@ -269,7 +271,7 @@ private fun DrawScope.drawStackBlock(
     val valueLayout = textMeasurer.measure(
         value,
         TextStyle(
-            color = if (isTop) TerminalGreen.copy(alpha = alpha) else TerminalGray.copy(alpha = 0.6f * alpha),
+            color = if (isTop) viz.dataPrimary.copy(alpha = alpha) else viz.textMuted.copy(alpha = 0.6f * alpha),
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace
         )

@@ -30,10 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.presentation.visualization.AluOperationVisual
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
-import com.cloveriris.calcore.ui.theme.TerminalBackground
-import com.cloveriris.calcore.ui.theme.TerminalGray
-import com.cloveriris.calcore.ui.theme.TerminalGreen
-import com.cloveriris.calcore.ui.theme.TerminalAmber
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * ALU 运算可视化（L3: ALU）
@@ -45,6 +42,7 @@ fun AluVisualizer(
     operation: AluOperationVisual?,
     modifier: Modifier = Modifier
 ) {
+    val viz = LocalVisualizationColors.current
     val textMeasurer = rememberTextMeasurer()
     val infiniteTransition = rememberInfiniteTransition(label = "alu-flicker")
     val flickerAlpha by infiniteTransition.animateFloat(
@@ -59,12 +57,12 @@ fun AluVisualizer(
 
     Column(
         modifier = modifier
-            .background(TerminalBackground)
+            .background(viz.stageBg)
             .padding(8.dp)
     ) {
         Text(
             text = "L3: ALU",
-            color = TerminalGray,
+            color = viz.textMuted,
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
             modifier = Modifier.padding(bottom = 8.dp)
@@ -79,7 +77,7 @@ fun AluVisualizer(
                 val idleLayout = textMeasurer.measure(
                     "ALU IDLE",
                     TextStyle(
-                        color = TerminalGray,
+                        color = viz.textMuted,
                         fontSize = 16.sp,
                         fontFamily = FontFamily.Monospace
                     )
@@ -120,12 +118,12 @@ fun AluVisualizer(
             // 整个 ALU 区域琥珀色闪烁背景
             if (operation.isActive) {
                 drawRect(
-                    color = TerminalAmber.copy(alpha = flickerAlpha * 0.12f),
+                    color = viz.accent.copy(alpha = flickerAlpha * 0.12f),
                     topLeft = Offset(startX - opGap / 2, centerY - boxHeight / 2 - 4.dp.toPx()),
                     size = Size(totalWidth + opGap, boxHeight + 8.dp.toPx())
                 )
                 drawRect(
-                    color = TerminalAmber.copy(alpha = flickerAlpha * 0.5f),
+                    color = viz.accent.copy(alpha = flickerAlpha * 0.5f),
                     topLeft = Offset(startX - opGap / 2, centerY - boxHeight / 2 - 4.dp.toPx()),
                     size = Size(totalWidth + opGap, boxHeight + 8.dp.toPx()),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx())
@@ -133,15 +131,15 @@ fun AluVisualizer(
             }
 
             // 左操作数
-            drawHexBox(startX, centerY - boxHeight / 2, boxWidth, boxHeight, leftHex, textMeasurer)
+            drawHexBox(startX, centerY - boxHeight / 2, boxWidth, boxHeight, leftHex, textMeasurer, viz)
             // 运算符
-            drawAluOperator(startX + boxWidth + opGap / 2, centerY, opSymbol, textMeasurer)
+            drawAluOperator(startX + boxWidth + opGap / 2, centerY, opSymbol, textMeasurer, viz)
             // 右操作数
-            drawHexBox(startX + boxWidth + opGap, centerY - boxHeight / 2, boxWidth, boxHeight, rightHex, textMeasurer)
+            drawHexBox(startX + boxWidth + opGap, centerY - boxHeight / 2, boxWidth, boxHeight, rightHex, textMeasurer, viz)
             // 等号
-            drawAluOperator(startX + boxWidth * 2 + opGap * 1.5f, centerY, "=", textMeasurer)
+            drawAluOperator(startX + boxWidth * 2 + opGap * 1.5f, centerY, "=", textMeasurer, viz)
             // 结果
-            drawHexBox(startX + boxWidth * 2 + opGap * 2, centerY - boxHeight / 2, boxWidth, boxHeight, resultHex, textMeasurer, isResult = true)
+            drawHexBox(startX + boxWidth * 2 + opGap * 2, centerY - boxHeight / 2, boxWidth, boxHeight, resultHex, textMeasurer, viz, isResult = true)
 
             // ===== 位运算细节条（底部） =====
             if (operation.isActive) {
@@ -149,11 +147,11 @@ fun AluVisualizer(
                 when (operation.operation) {
                     "ADD", "SUB" -> drawCarryRippleDetail(
                         startX, detailY, boxWidth, operation.left, operation.right, operation.result,
-                        textMeasurer, flickerAlpha
+                        textMeasurer, flickerAlpha, viz
                     )
                     "AND", "OR", "XOR" -> drawBitwiseGateDetail(
                         startX, detailY, boxWidth, opGap, operation.operation,
-                        operation.left, operation.right, operation.result, textMeasurer
+                        operation.left, operation.right, operation.result, textMeasurer, viz
                     )
                     else -> { /* 其他运算不展示细节 */ }
                 }
@@ -169,15 +167,16 @@ private fun DrawScope.drawHexBox(
     height: Float,
     hex: String,
     textMeasurer: TextMeasurer,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme,
     isResult: Boolean = false
 ) {
     drawRect(
-        color = if (isResult) TerminalGreen.copy(alpha = 0.08f) else Color(0xFF1F1F1F),
+        color = if (isResult) viz.dataPrimary.copy(alpha = 0.08f) else viz.surface,
         topLeft = Offset(x, y),
         size = Size(width, height)
     )
     drawRect(
-        color = if (isResult) TerminalGreen.copy(alpha = 0.4f) else TerminalAmber.copy(alpha = 0.3f),
+        color = if (isResult) viz.dataPrimary.copy(alpha = 0.4f) else viz.accent.copy(alpha = 0.3f),
         topLeft = Offset(x, y),
         size = Size(width, height),
         style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
@@ -185,7 +184,7 @@ private fun DrawScope.drawHexBox(
     val textLayout = textMeasurer.measure(
         hex,
         TextStyle(
-            color = TerminalGreen,
+            color = viz.dataPrimary,
             fontSize = 9.sp,
             fontFamily = FontFamily.Monospace
         )
@@ -203,12 +202,13 @@ private fun DrawScope.drawAluOperator(
     x: Float,
     y: Float,
     symbol: String,
-    textMeasurer: TextMeasurer
+    textMeasurer: TextMeasurer,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme
 ) {
     val textLayout = textMeasurer.measure(
         symbol,
         TextStyle(
-            color = TerminalGray,
+            color = viz.textMuted,
             fontSize = 20.sp,
             fontFamily = FontFamily.Monospace
         )
@@ -228,7 +228,8 @@ private fun DrawScope.drawAluOperator(
 private fun DrawScope.drawCarryRippleDetail(
     startX: Float, y: Float, boxWidth: Float,
     left: Long, right: Long, result: Long,
-    textMeasurer: TextMeasurer, flickerAlpha: Float
+    textMeasurer: TextMeasurer, flickerAlpha: Float,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme
 ) {
     val bitCount = 4
     val bitW = boxWidth / bitCount
@@ -246,11 +247,11 @@ private fun DrawScope.drawCarryRippleDetail(
         val bitIndex = i // 从 LSB 开始
 
         // 左操作数位
-        drawBitCell(bx, y, bitW - gap, bitH, leftBits[bitIndex], textMeasurer, isTop = true)
+        drawBitCell(bx, y, bitW - gap, bitH, leftBits[bitIndex], textMeasurer, viz, isTop = true)
         // 右操作数位
-        drawBitCell(bx, y + bitH + 2.dp.toPx(), bitW - gap, bitH, rightBits[bitIndex], textMeasurer, isTop = false)
+        drawBitCell(bx, y + bitH + 2.dp.toPx(), bitW - gap, bitH, rightBits[bitIndex], textMeasurer, viz, isTop = false)
         // 结果位
-        drawBitCell(bx, y + bitH * 2 + 6.dp.toPx(), bitW - gap, bitH, resultBits[bitIndex], textMeasurer, isResult = true)
+        drawBitCell(bx, y + bitH * 2 + 6.dp.toPx(), bitW - gap, bitH, resultBits[bitIndex], textMeasurer, viz, isResult = true)
 
         // 进位连接线（相邻位之间）
         if (i < bitCount - 1) {
@@ -258,20 +259,20 @@ private fun DrawScope.drawCarryRippleDetail(
             val fromX = bx + bitW / 2
             val toX = bx + bitW + gap / 2
             drawLine(
-                color = TerminalGreen.copy(alpha = 0.2f + 0.3f * flickerAlpha),
+                color = viz.dataPrimary.copy(alpha = 0.2f + 0.3f * flickerAlpha),
                 start = Offset(fromX, lineY),
                 end = Offset(toX, lineY),
                 strokeWidth = 1.dp.toPx()
             )
             // 进位箭头（从低位指向高位，即从左到右）
             drawLine(
-                color = TerminalAmber.copy(alpha = 0.4f * flickerAlpha),
+                color = viz.accent.copy(alpha = 0.4f * flickerAlpha),
                 start = Offset(fromX + 4.dp.toPx(), lineY - 2.dp.toPx()),
                 end = Offset(fromX + 8.dp.toPx(), lineY),
                 strokeWidth = 1.dp.toPx()
             )
             drawLine(
-                color = TerminalAmber.copy(alpha = 0.4f * flickerAlpha),
+                color = viz.accent.copy(alpha = 0.4f * flickerAlpha),
                 start = Offset(fromX + 4.dp.toPx(), lineY + 2.dp.toPx()),
                 end = Offset(fromX + 8.dp.toPx(), lineY),
                 strokeWidth = 1.dp.toPx()
@@ -282,7 +283,7 @@ private fun DrawScope.drawCarryRippleDetail(
     // "CARRY RIPPLE" 标签
     val labelLayout = textMeasurer.measure(
         "CARRY",
-        TextStyle(color = TerminalGray.copy(alpha = 0.4f), fontSize = 7.sp, fontFamily = FontFamily.Monospace)
+        TextStyle(color = viz.textMuted.copy(alpha = 0.4f), fontSize = 7.sp, fontFamily = FontFamily.Monospace)
     )
     drawText(labelLayout, topLeft = Offset(startX + boxWidth + 4.dp.toPx(), y + bitH))
 }
@@ -293,7 +294,8 @@ private fun DrawScope.drawCarryRippleDetail(
 private fun DrawScope.drawBitwiseGateDetail(
     startX: Float, y: Float, boxWidth: Float, opGap: Float,
     op: String, left: Long, right: Long, result: Long,
-    textMeasurer: TextMeasurer
+    textMeasurer: TextMeasurer,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme
 ) {
     val bitCount = 4
     val bitW = boxWidth / bitCount
@@ -309,8 +311,8 @@ private fun DrawScope.drawBitwiseGateDetail(
         val bitIndex = i
 
         // 输入位（上下排列）
-        drawBitCell(bx, y, bitW - gap, bitH, leftBits[bitIndex], textMeasurer, isTop = true)
-        drawBitCell(bx, y + bitH + 2.dp.toPx(), bitW - gap, bitH, rightBits[bitIndex], textMeasurer, isTop = false)
+        drawBitCell(bx, y, bitW - gap, bitH, leftBits[bitIndex], textMeasurer, viz, isTop = true)
+        drawBitCell(bx, y + bitH + 2.dp.toPx(), bitW - gap, bitH, rightBits[bitIndex], textMeasurer, viz, isTop = false)
 
         // 逻辑门符号（居中）
         val gateSymbol = when (op) {
@@ -321,7 +323,7 @@ private fun DrawScope.drawBitwiseGateDetail(
         }
         val gateLayout = textMeasurer.measure(
             gateSymbol,
-            TextStyle(color = TerminalGray.copy(alpha = 0.5f), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+            TextStyle(color = viz.textMuted.copy(alpha = 0.5f), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         )
         drawText(
             gateLayout,
@@ -332,12 +334,12 @@ private fun DrawScope.drawBitwiseGateDetail(
         )
 
         // 结果位
-        drawBitCell(bx, y + bitH * 2 + 14.dp.toPx(), bitW - gap, bitH, resultBits[bitIndex], textMeasurer, isResult = true)
+        drawBitCell(bx, y + bitH * 2 + 14.dp.toPx(), bitW - gap, bitH, resultBits[bitIndex], textMeasurer, viz, isResult = true)
 
         // 连线（输入→门→输出）
         val centerX = bx + (bitW - gap) / 2
         drawLine(
-            color = TerminalGreen.copy(alpha = 0.2f),
+            color = viz.dataPrimary.copy(alpha = 0.2f),
             start = Offset(centerX, y + bitH),
             end = Offset(centerX, y + bitH * 2 + 14.dp.toPx()),
             strokeWidth = 0.5f.dp.toPx()
@@ -348,18 +350,19 @@ private fun DrawScope.drawBitwiseGateDetail(
 private fun DrawScope.drawBitCell(
     x: Float, y: Float, w: Float, h: Float,
     bit: Boolean, textMeasurer: TextMeasurer,
+    viz: com.cloveriris.calcore.ui.theme.VisualizationColorScheme,
     isTop: Boolean = false, isResult: Boolean = false
 ) {
     val bgColor = when {
-        isResult && bit -> TerminalGreen.copy(alpha = 0.6f)
-        isResult -> Color(0xFF1F1F1F)
-        bit -> TerminalGreen.copy(alpha = 0.25f)
+        isResult && bit -> viz.dataPrimary.copy(alpha = 0.6f)
+        isResult -> viz.surface
+        bit -> viz.dataPrimary.copy(alpha = 0.25f)
         else -> Color(0xFF1A1A1A)
     }
     val borderColor = when {
-        isResult && bit -> TerminalGreen
-        isResult -> TerminalGray.copy(alpha = 0.2f)
-        bit -> TerminalGreen.copy(alpha = 0.4f)
+        isResult && bit -> viz.dataPrimary
+        isResult -> viz.textMuted.copy(alpha = 0.2f)
+        bit -> viz.dataPrimary.copy(alpha = 0.4f)
         else -> Color(0xFF2A2A2A)
     }
     drawRect(color = bgColor, topLeft = Offset(x, y), size = Size(w, h))
@@ -369,7 +372,7 @@ private fun DrawScope.drawBitCell(
     val textLayout = textMeasurer.measure(
         text,
         TextStyle(
-            color = if (bit && isResult) Color.Black else if (bit) TerminalGreen else TerminalGray.copy(alpha = 0.4f),
+            color = if (bit && isResult) Color.Black else if (bit) viz.dataPrimary else viz.textMuted.copy(alpha = 0.4f),
             fontSize = 8.sp,
             fontFamily = FontFamily.Monospace
         )

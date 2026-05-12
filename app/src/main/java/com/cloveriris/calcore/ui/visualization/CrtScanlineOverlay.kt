@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
+import com.cloveriris.calcore.ui.theme.LocalVisualizationColors
 
 /**
  * CRT 扫描线叠加效果
@@ -29,6 +30,7 @@ import com.cloveriris.calcore.ui.theme.CalcoreTheme
  */
 @Composable
 fun CrtScanlineOverlay(modifier: Modifier = Modifier) {
+    val viz = LocalVisualizationColors.current
     val infiniteTransition = rememberInfiniteTransition(label = "crt-scan")
 
     // 垂直刷新光束位置（0f ~ 1f，循环）
@@ -52,7 +54,7 @@ fun CrtScanlineOverlay(modifier: Modifier = Modifier) {
             // 扫描线中心略亮，边缘暗
             val lineAlpha = 0.04f + 0.03f * kotlin.math.sin(i * 0.5f)
             drawLine(
-                color = Color(0xFF00FF41).copy(alpha = lineAlpha),
+                color = viz.dataPrimary.copy(alpha = lineAlpha * 0.5f),
                 start = Offset(0f, y),
                 end = Offset(size.width, y),
                 strokeWidth = 0.5f.dp.toPx()
@@ -66,9 +68,9 @@ fun CrtScanlineOverlay(modifier: Modifier = Modifier) {
             brush = Brush.verticalGradient(
                 colors = listOf(
                     Color.Transparent,
-                    Color(0xFF00FF41).copy(alpha = 0.06f),
-                    Color(0xFF00FF41).copy(alpha = 0.12f),
-                    Color(0xFF00FF41).copy(alpha = 0.06f),
+                    viz.dataPrimary.copy(alpha = 0.06f),
+                    viz.dataPrimary.copy(alpha = 0.12f),
+                    viz.dataPrimary.copy(alpha = 0.06f),
                     Color.Transparent
                 ),
                 startY = beamY - beamHeight * 2,
@@ -96,10 +98,10 @@ fun CrtScanlineOverlay(modifier: Modifier = Modifier) {
         drawRect(
             brush = Brush.verticalGradient(
                 colors = listOf(
-                    Color(0xFF00FF41).copy(alpha = 0.03f),
+                    viz.dataPrimary.copy(alpha = 0.03f),
                     Color.Transparent,
                     Color.Transparent,
-                    Color(0xFF00FF41).copy(alpha = 0.03f)
+                    viz.dataPrimary.copy(alpha = 0.03f)
                 )
             ),
             size = androidx.compose.ui.geometry.Size(size.width, size.height)
