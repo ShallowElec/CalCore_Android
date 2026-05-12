@@ -1,5 +1,6 @@
 package com.cloveriris.calcore.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -191,6 +192,7 @@ private fun ThemeOption(
         },
         modifier = modifier
             .fillMaxWidth()
+            .clickable { onClick() }
             .padding(vertical = 2.dp),
         colors = androidx.compose.material3.ListItemDefaults.colors(
             containerColor = if (selected) {

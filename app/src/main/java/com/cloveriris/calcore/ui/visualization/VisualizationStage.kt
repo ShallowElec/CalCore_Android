@@ -2,6 +2,10 @@ package com.cloveriris.calcore.ui.visualization
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,8 +27,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -59,23 +67,23 @@ fun VisualizationStage(
         ScrollState(0)
     }
 
-    Column(
-        modifier = modifier
-            .background(TerminalBackground)
-            .verticalScroll(scrollState)
-            .padding(12.dp)
-    ) {
-        // 标题栏 + 事件描述
-        RowTitle(state)
+    Box(modifier = modifier.background(TerminalBackground)) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(scrollState)
+                .padding(12.dp)
+        ) {
+            // 标题栏 + 事件描述
+            RowTitle(state)
 
-        Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-        // 如果还没有任何事件且不在播放中，显示占位提示
-        if (state.lastEventDescription.isEmpty() && state.evaluationProgress == 0f && !state.isPlaying) {
-            VisualizationPlaceholder()
-        } else {
-            PhasePipelineContent(state)
-        }
+            // 如果还没有任何事件且不在播放中，显示占位提示
+            if (state.lastEventDescription.isEmpty() && state.evaluationProgress == 0f && !state.isPlaying) {
+                VisualizationPlaceholder()
+            } else {
+                PhasePipelineContent(state)
+            }
 
         // 时间轴控制条（底部固定）
         if (state.totalDurationMs > 0) {
@@ -99,6 +107,10 @@ fun VisualizationStage(
             completedPhases = state.completedPhases,
             onToggleLevel = onToggleLevel
         )
+        }
+
+        // CRT 扫描线叠加层（全局终端质感）
+        CrtScanlineOverlay()
     }
 }
 
@@ -229,10 +241,10 @@ private fun animatedHeightForPhase(phase: PipelinePhase, state: VisualizationUiS
     // 根据阶段内容估算高度，活跃时给足够空间
     return when (phase) {
         PipelinePhase.PHASE_INPUT -> 120.dp
-        PipelinePhase.PHASE_REGISTERS -> 380.dp
-        PipelinePhase.PHASE_MEMORY -> 320.dp
+        PipelinePhase.PHASE_REGISTERS -> 420.dp
+        PipelinePhase.PHASE_MEMORY -> 340.dp
         PipelinePhase.PHASE_PARSE -> 280.dp
-        PipelinePhase.PHASE_EXECUTE -> 240.dp
+        PipelinePhase.PHASE_EXECUTE -> 280.dp
         PipelinePhase.PHASE_OUTPUT -> 100.dp
         else -> 80.dp
     }
@@ -405,9 +417,66 @@ private fun ResultFlowIndicator(progress: Float) {
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text("REGISTER", color = TerminalGray, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
-        Box(modifier = Modifier.weight(1f).height(2.dp).background(TerminalGray.copy(alpha = 0.2f))) {
-            Box(modifier = Modifier.fillMaxWidth(progress).height(2.dp).background(TerminalGreen))
+
+        // 多粒子流光带（替代简单进度条）
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier.weight(1f).height(12.dp)
+        ) {
+            val barY = size.height / 2
+            // 基线
+            drawLine(
+                color = TerminalGray.copy(alpha = 0.15f),
+                start = Offset(0f, barY),
+                end = Offset(size.width, barY),
+                strokeWidth = 2.dp.toPx()
+            )
+            // 绿色流光进度
+            if (progress > 0f) {
+                val endX = size.width * progress
+                drawLine(
+                    color = TerminalGreen.copy(alpha = 0.6f),
+                    start = Offset(0f, barY),
+                    end = Offset(endX, barY),
+                    strokeWidth = 2.dp.toPx()
+                )
+                // 多粒子拖尾（5 个粒子）
+                val steps = 5
+                for (i in 0..steps) {
+                    val t = progress - (i / steps.toFloat()) * 0.12f
+                    if (t < 0f || t > 1f) continue
+                    val px = size.width * t
+                    val alpha = (1f - i / steps.toFloat()).coerceIn(0.1f, 1f) * progress.coerceAtLeast(0.3f)
+                    val radius = (3.5f - i * 0.4f).coerceAtLeast(1f).dp.toPx()
+                    val color = when {
+                        i == 0 -> Color.White
+                        i <= 2 -> TerminalGreen.copy(alpha = 1f)
+                        else -> TerminalGreen
+                    }
+                    drawCircle(
+                        color = color.copy(alpha = alpha),
+                        radius = radius,
+                        center = Offset(px, barY)
+                    )
+                }
+                // 箭头头部
+                if (progress > 0.85f) {
+                    val tipX = endX
+                    drawLine(
+                        color = TerminalGreen,
+                        start = Offset(tipX - 5.dp.toPx(), barY - 3.dp.toPx()),
+                        end = Offset(tipX, barY),
+                        strokeWidth = 1.5f.dp.toPx()
+                    )
+                    drawLine(
+                        color = TerminalGreen,
+                        start = Offset(tipX - 5.dp.toPx(), barY + 3.dp.toPx()),
+                        end = Offset(tipX, barY),
+                        strokeWidth = 1.5f.dp.toPx()
+                    )
+                }
+            }
         }
+
         Text("DISPLAY", color = TerminalGray, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
     }
 }
@@ -568,24 +637,54 @@ private fun SectionTitle(text: String) {
 
 @Composable
 private fun VisualizationPlaceholder() {
+    val infiniteTransition = rememberInfiniteTransition(label = "placeholder")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow"
+    )
+    val scanOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2500, easing = androidx.compose.animation.core.LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "scan"
+    )
+
     Box(
         modifier = Modifier.fillMaxWidth().height(120.dp),
         contentAlignment = Alignment.Center
     ) {
+        // 扫描线背景
+        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            val beamY = size.height * scanOffset
+            drawRect(
+                color = TerminalGreen.copy(alpha = 0.03f),
+                topLeft = Offset(0f, beamY - 8.dp.toPx()),
+                size = Size(size.width, 16.dp.toPx())
+            )
+        }
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "Press any key to visualize",
-                color = TerminalGreen.copy(alpha = 0.6f),
+                text = "▶ Press any key to visualize",
+                color = TerminalGreen.copy(alpha = 0.5f + 0.5f * glowAlpha),
                 fontSize = 16.sp,
                 fontFamily = FontFamily.Monospace
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "01 INPUT → 02 REGISTERS → 03 MEMORY → 04 PARSE → 05 EXECUTE → 06 OUTPUT",
-                color = TerminalGray.copy(alpha = 0.4f),
+                color = TerminalGray.copy(alpha = 0.35f + 0.15f * glowAlpha),
                 fontSize = 9.sp,
                 fontFamily = FontFamily.Monospace
             )

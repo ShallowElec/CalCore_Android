@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
@@ -88,6 +89,20 @@ fun DisplayBufferView(
                     .background(Color(0xFF0A0A0A), RoundedCornerShape(8.dp))
                     .padding(12.dp)
             ) {
+                // LCD 局部扫描线 overlay
+                androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
+                    val lineCount = 6
+                    val spacing = size.height / lineCount
+                    for (i in 0..lineCount) {
+                        drawLine(
+                            color = TerminalGreen.copy(alpha = 0.025f),
+                            start = Offset(0f, i * spacing),
+                            end = Offset(size.width, i * spacing),
+                            strokeWidth = 0.5f.dp.toPx()
+                        )
+                    }
+                }
+
                 val text = buffer?.text ?: ""
                 val cursorPos = (buffer?.cursorPosition ?: 0).coerceIn(0, text.length)
                 val isTyping = buffer?.isTyping == true

@@ -340,9 +340,16 @@ class VisualizationViewModel @Inject constructor(
                     action.value,
                     action.isAllocated,
                     action.isPointer,
-                    action.isWriting
+                    action.isWriting,
+                    action.regionTag
                 )
-                if (existing >= 0) cells[existing] = cell else cells.add(cell)
+                if (existing >= 0) {
+                    // 保留已有的 regionTag，除非新 action 显式指定了
+                    val merged = if (action.regionTag.isNotEmpty()) cell else cell.copy(regionTag = cells[existing].regionTag)
+                    cells[existing] = merged
+                } else {
+                    cells.add(cell)
+                }
                 state.copy(memoryCells = cells)
             }
 

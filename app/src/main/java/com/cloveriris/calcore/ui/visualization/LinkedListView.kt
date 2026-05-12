@@ -1,6 +1,10 @@
 package com.cloveriris.calcore.ui.visualization
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -16,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -143,10 +148,39 @@ private fun LinkedListNodeItem(node: LinkedListNodeVisual) {
     val borderColor = if (node.isHighlighted) TerminalAmber else TerminalGreen
     val bgColor = if (node.isPointer) Color.Transparent else TerminalGreen
 
+    // 高亮脉冲动画
+    val infiniteTransition = rememberInfiniteTransition(label = "node-pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(400),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
     Box(
         modifier = Modifier
             .size(48.dp)
             .drawBehind {
+                // 高亮脉冲外圈
+                if (node.isHighlighted) {
+                    val pulseStroke = 2.dp.toPx()
+                    val pulseInset = 2.dp.toPx() + pulseStroke
+                    drawRoundRect(
+                        color = TerminalAmber.copy(alpha = pulseAlpha * 0.5f),
+                        topLeft = Offset(-pulseInset, -pulseInset),
+                        size = androidx.compose.ui.geometry.Size(
+                            size.width + pulseInset * 2,
+                            size.height + pulseInset * 2
+                        ),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                            6.dp.toPx(), 6.dp.toPx()
+                        ),
+                        style = Stroke(width = pulseStroke)
+                    )
+                }
                 // 绘制方块背景
                 if (node.isPointer) {
                     // 空心方块 = 指针 / 引用

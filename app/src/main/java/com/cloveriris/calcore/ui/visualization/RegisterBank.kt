@@ -1,10 +1,15 @@
 package com.cloveriris.calcore.ui.visualization
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -45,6 +50,21 @@ fun RegisterBank(
     dataPath: DataPathVisual? = null
 ) {
     val textMeasurer = rememberTextMeasurer()
+
+    // 值变化扫描线动画：检测值发生变化的寄存器行
+    val prevValues = remember(registers) { registers.map { it.value } }
+    val scanAnims = remember { mutableStateMapOf<Int, Animatable<Float, *>>() }
+
+    LaunchedEffect(registers) {
+        registers.forEachIndexed { index, reg ->
+            if (index < prevValues.size && reg.value != prevValues[index]) {
+                val anim = scanAnims.getOrPut(index) { Animatable(0f) }
+                anim.snapTo(0f)
+                anim.animateTo(1f, tween(400))
+                anim.animateTo(0f, tween(200))
+            }
+        }
+    }
 
     Canvas(
         modifier = modifier
@@ -157,6 +177,26 @@ fun RegisterBank(
                         blockX + (blockWidth - gap - hexLayout.size.width) / 2,
                         y + 1.dp.toPx() + (rowHeight - gap - 2.dp.toPx() - hexLayout.size.height) / 2
                     )
+                )
+            }
+
+            // 值变化扫描线（水平光束从左向右扫过）
+            val scanProgress = scanAnims[index]?.value ?: 0f
+            if (scanProgress > 0.01f) {
+                val beamX = size.width * scanProgress
+                val beamWidth = 24.dp.toPx()
+                val beamAlpha = (1f - kotlin.math.abs(scanProgress - 0.5f) * 2f).coerceIn(0f, 1f)
+                drawRect(
+                    color = TerminalGreen.copy(alpha = 0.25f * beamAlpha),
+                    topLeft = Offset((beamX - beamWidth).coerceAtLeast(0f), y),
+                    size = Size(beamWidth.coerceAtMost(beamX), rowHeight - gap)
+                )
+                // 中心高亮细线
+                drawLine(
+                    color = Color.White.copy(alpha = 0.6f * beamAlpha),
+                    start = Offset(beamX, y),
+                    end = Offset(beamX, y + rowHeight - gap),
+                    strokeWidth = 1.5f.dp.toPx()
                 )
             }
         }

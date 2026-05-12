@@ -67,7 +67,7 @@ object VisualizationEngine {
         val actions = mutableListOf<TimedAction>()
         val spName = arch.spRegisterName
         val seg = deriveSegment(expr)
-        val addr = deriveAddress(ascii.toDouble(), expr.length)
+        val addr = deriveAddress(ascii.toLong(), expr.length)
 
         actions += TimedAction(0, AnimationAction.UpdateDescription("输入数字: $digit"))
         actions += TimedAction(0, AnimationAction.UpdateBitGrid(bits, "ASCII '$digit' = 0x%02X".format(ascii)))
@@ -79,7 +79,7 @@ object VisualizationEngine {
             fullAddress = (seg shl 16) + addr,
             progress = 0.5f
         ))
-        actions += TimedAction(3, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = true))
+        actions += TimedAction(3, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = true, regionTag = "DATA"))
         actions += TimedAction(3, AnimationAction.UpdateAddressBus(
             segment = seg,
             offset = addr,
@@ -91,7 +91,7 @@ object VisualizationEngine {
         actions += TimedAction(4, AnimationAction.UpdateCursorAddress(addr.toInt(), expr.length - 1))
         actions += TimedAction(5, AnimationAction.UpdateDataPath(spName, "MEM", progress = 1.0f))
         actions += TimedAction(5, AnimationAction.UpdateRegister(0, ascii.toLong(), isHighlighted = false))
-        actions += TimedAction(5, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = false))
+        actions += TimedAction(5, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = false, regionTag = "DATA"))
         actions += TimedAction(6, AnimationAction.UpdateResultFlow("REGISTER", "DISPLAY", progress = 0.5f))
 
         val total = 8L
@@ -107,7 +107,7 @@ object VisualizationEngine {
         val actions = mutableListOf<TimedAction>()
         val spName = arch.spRegisterName
         val seg = deriveSegment(expr)
-        val addr = deriveAddress(op.hashCode().toDouble(), expr.length)
+        val addr = deriveAddress(op.hashCode().toLong(), expr.length)
         val ascii = op.first().code
 
         actions += TimedAction(0, AnimationAction.UpdateDescription("输入运算符: $op"))
@@ -120,12 +120,12 @@ object VisualizationEngine {
             fullAddress = (seg shl 16) + addr,
             progress = 0.6f
         ))
-        actions += TimedAction(3, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = true))
+        actions += TimedAction(3, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = true, regionTag = "DATA"))
         actions += TimedAction(3, AnimationAction.UpdateDisplayBuffer(expr, expr.length - 1, isTyping = true))
         actions += TimedAction(3, AnimationAction.UpdateCursorAddress(addr.toInt(), expr.length - 1))
         actions += TimedAction(4, AnimationAction.UpdateDataPath(arch.registerNames[1], "MEM", progress = 1.0f))
         actions += TimedAction(4, AnimationAction.UpdateRegister(1, ascii.toLong(), isHighlighted = false))
-        actions += TimedAction(4, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = false))
+        actions += TimedAction(4, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = false, regionTag = "DATA"))
 
         val total = 5L
         actions += TimedAction(total, AnimationAction.SetDuration(total))
@@ -151,9 +151,12 @@ object VisualizationEngine {
 
         // 基于表达式内容生成确定性内存地址和段寄存器
         val seg = deriveSegment(expression)
-        val leftAddr = deriveAddress(leftVal, 0)
-        val rightAddr = deriveAddress(rightVal, 1)
-        val resultAddr = deriveAddress(result, 2)
+        val leftSeed = leftVal.toRawBits()
+        val rightSeed = rightVal.toRawBits()
+        val resultSeed = result.toRawBits()
+        val leftAddr = deriveAddress(leftSeed, 0)
+        val rightAddr = deriveAddress(rightSeed, 1)
+        val resultAddr = deriveAddress(resultSeed, 2)
 
         // 基于真实表达式构建运算符栈阶段
         val opStackStages = buildShuntingYardStages(expression)
@@ -168,11 +171,20 @@ object VisualizationEngine {
         actions += TimedAction(0, AnimationAction.UpdateDescription("计算: $expression = $result"))
         actions += TimedAction(0, AnimationAction.EnterPhase(PipelinePhase.PHASE_INPUT, phaseDurationMs = 800L))
         actions += TimedAction(0, AnimationAction.UpdateBitGrid(leftBits, "LEFT OPERAND = $leftVal"))
+        // IEEE 754 分区依次高亮：符号位 → 指数位 → 尾数位
         actions += TimedAction(1, AnimationAction.UpdateBitGridHighlights(
-            highlightIndices = buildSet { add(63); addAll(52..62); addAll(0..51) },
-            highlightColor = 0xFFFFA657.toInt()
+            highlightIndices = setOf(63), highlightColor = 0xFFFFA657.toInt()
         ))
+        actions += TimedAction(1, AnimationAction.UpdateBitGrid(leftBits, "SIGN = ${if (leftBits[0]) "-" else "+"}"))
+        actions += TimedAction(2, AnimationAction.UpdateBitGridHighlights(
+            highlightIndices = (52..62).toSet(), highlightColor = 0xFF4FC3F7.toInt()
+        ))
+        actions += TimedAction(2, AnimationAction.UpdateBitGrid(leftBits, "EXPONENT ×11"))
         actions += TimedAction(2, AnimationAction.UpdateBitGrid(rightBits, "RIGHT OPERAND = $rightVal"))
+        actions += TimedAction(3, AnimationAction.UpdateBitGridHighlights(
+            highlightIndices = (0..51).toSet(), highlightColor = 0xFF00FF41.toInt()
+        ))
+        actions += TimedAction(3, AnimationAction.UpdateBitGrid(leftBits, "MANTISSA ×52"))
         actions += TimedAction(3, AnimationAction.ExitPhase(
             PipelinePhase.PHASE_INPUT,
             "L1-L2: $leftVal, $rightVal loaded"
@@ -207,7 +219,14 @@ object VisualizationEngine {
         // ========== PHASE 3: MEMORY (L4) T8-T11 ==========
         actions += TimedAction(8, AnimationAction.EnterPhase(PipelinePhase.PHASE_MEMORY, phaseDurationMs = 800L))
 
-        actions += TimedAction(8, AnimationAction.WriteMemory(leftAddr.toInt(), leftVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = true))
+        // 1. 左操作数 64-bit (8 bytes) → 数据段
+        val leftBytes = doubleToBytes(leftVal)
+        leftBytes.forEachIndexed { i, byte ->
+            actions += TimedAction(8, AnimationAction.WriteMemory(
+                (leftAddr + i).toInt(), byte,
+                isAllocated = true, isPointer = false, isWriting = true, regionTag = "DATA"
+            ))
+        }
         actions += TimedAction(8, AnimationAction.PushStack("left=$leftVal", "0x${leftAddr.toString(16).uppercase()}"))
         actions += TimedAction(8, AnimationAction.UpdateStackAnimation(
             operation = AnimationAction.StackOperationType.PUSH,
@@ -215,7 +234,14 @@ object VisualizationEngine {
         ))
         actions += TimedAction(8, AnimationAction.UpdateStackPointer("$spName-0x08", isHighlighted = true))
 
-        actions += TimedAction(9, AnimationAction.WriteMemory(rightAddr.toInt(), rightVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = true))
+        // 2. 右操作数 64-bit (8 bytes) → 数据段
+        val rightBytes = doubleToBytes(rightVal)
+        rightBytes.forEachIndexed { i, byte ->
+            actions += TimedAction(9, AnimationAction.WriteMemory(
+                (rightAddr + i).toInt(), byte,
+                isAllocated = true, isPointer = false, isWriting = true, regionTag = "DATA"
+            ))
+        }
         actions += TimedAction(9, AnimationAction.PushStack("right=$rightVal", "0x${rightAddr.toString(16).uppercase()}"))
         actions += TimedAction(9, AnimationAction.UpdateStackAnimation(
             operation = AnimationAction.StackOperationType.PUSH,
@@ -223,9 +249,84 @@ object VisualizationEngine {
         ))
         actions += TimedAction(9, AnimationAction.UpdateStackPointer("$spName-0x10", isHighlighted = false))
 
+        // 3. 结果 64-bit (8 bytes) 预分配 → 数据段
+        val resultBytes = doubleToBytes(result)
+        resultBytes.forEachIndexed { i, byte ->
+            actions += TimedAction(9, AnimationAction.WriteMemory(
+                (resultAddr + i).toInt(), byte,
+                isAllocated = true, isPointer = false, isWriting = false, regionTag = "DATA"
+            ))
+        }
+
+        // 4. 表达式字符串 → 数据段（ASCII 字节，最多 8 字符）
+        val exprDataAddr = deriveAddress(expression.hashCode().toLong(), 10)
+        val exprChars = expression.take(8).map { it.code.toByte() }
+        exprChars.forEachIndexed { i, byte ->
+            actions += TimedAction(10, AnimationAction.WriteMemory(
+                (exprDataAddr + i).toInt(), byte,
+                isAllocated = true, isPointer = false, isWriting = true, regionTag = "DATA"
+            ))
+        }
+
+        // 5. 常量池（π / e）→ 常量段
+        val constPoolAddr = deriveAddress(expression.hashCode().toLong(), 20)
+        val hasPi = expression.contains("pi", ignoreCase = true)
+        val hasE = expression.contains("e") && !expression.contains("exp", ignoreCase = true)
+        if (hasPi) {
+            doubleToBytes(kotlin.math.PI).forEachIndexed { i, byte ->
+                actions += TimedAction(10, AnimationAction.WriteMemory(
+                    (constPoolAddr + i).toInt(), byte,
+                    isAllocated = true, isPointer = false, isWriting = true, regionTag = "CONST"
+                ))
+            }
+        }
+        if (hasE) {
+            doubleToBytes(kotlin.math.E).forEachIndexed { i, byte ->
+                actions += TimedAction(10, AnimationAction.WriteMemory(
+                    (constPoolAddr + 8 + i).toInt(), byte,
+                    isAllocated = true, isPointer = false, isWriting = true, regionTag = "CONST"
+                ))
+            }
+        }
+
+        // 6. 堆区 / 空闲区（混合已分配与指针，构成完整网格）
+        val heapAddr = deriveAddress(expression.hashCode().toLong(), 30)
+        val heapData = List(8) { ((it * 31 + expression.length * 7) % 256).toByte() }
+        heapData.forEachIndexed { i, byte ->
+            actions += TimedAction(10, AnimationAction.WriteMemory(
+                (heapAddr + i).toInt(), byte,
+                isAllocated = i % 3 != 0,
+                isPointer = i % 5 == 0 && i != 0,
+                isWriting = false, regionTag = "HEAP"
+            ))
+        }
+
+        // 7. 指针动画 + 光标读取头移动
         actions += TimedAction(10, AnimationAction.AnimateMemoryPointer(leftAddr.toInt(), rightAddr.toInt(), progress = 0.6f))
-        actions += TimedAction(10, AnimationAction.WriteMemory(leftAddr.toInt(), leftVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = false))
-        actions += TimedAction(10, AnimationAction.WriteMemory(rightAddr.toInt(), rightVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = false))
+        actions += TimedAction(10, AnimationAction.UpdateCursorAddress(leftAddr.toInt(), 0))
+        actions += TimedAction(10, AnimationAction.UpdateCursorAddress(rightAddr.toInt(), 1))
+
+        // 8. 关闭 left / right / expr / const 的写入脉冲
+        leftBytes.forEachIndexed { i, byte ->
+            actions += TimedAction(10, AnimationAction.WriteMemory((leftAddr + i).toInt(), byte, isAllocated = true, isPointer = false, isWriting = false))
+        }
+        rightBytes.forEachIndexed { i, byte ->
+            actions += TimedAction(10, AnimationAction.WriteMemory((rightAddr + i).toInt(), byte, isAllocated = true, isPointer = false, isWriting = false))
+        }
+        exprChars.forEachIndexed { i, byte ->
+            actions += TimedAction(11, AnimationAction.WriteMemory((exprDataAddr + i).toInt(), byte, isAllocated = true, isPointer = false, isWriting = false))
+        }
+        if (hasPi) {
+            doubleToBytes(kotlin.math.PI).forEachIndexed { i, byte ->
+                actions += TimedAction(11, AnimationAction.WriteMemory((constPoolAddr + i).toInt(), byte, isAllocated = true, isPointer = false, isWriting = false))
+            }
+        }
+        if (hasE) {
+            doubleToBytes(kotlin.math.E).forEachIndexed { i, byte ->
+                actions += TimedAction(11, AnimationAction.WriteMemory((constPoolAddr + 8 + i).toInt(), byte, isAllocated = true, isPointer = false, isWriting = false))
+            }
+        }
+
         actions += TimedAction(11, AnimationAction.ExitPhase(
             PipelinePhase.PHASE_MEMORY,
             "L4: mem[0x${leftAddr.toString(16).uppercase()}]=$leftVal, mem[0x${rightAddr.toString(16).uppercase()}]=$rightVal, stack pushed"
@@ -305,10 +406,20 @@ object VisualizationEngine {
         actions += TimedAction(21, AnimationAction.UpdateDataPath("ALU", arch.registerNames[0], progress = 0.5f))
         actions += TimedAction(21, AnimationAction.UpdateRegister(0, result.toLong(), isHighlighted = true))
         actions += TimedAction(22, AnimationAction.UpdateDataPath(arch.registerNames[0], "MEM", progress = 0.7f))
-        actions += TimedAction(22, AnimationAction.WriteMemory(resultAddr.toInt(), rawBits.toByte(), isAllocated = true, isPointer = false, isWriting = true))
+        resultBytes.forEachIndexed { i, byte ->
+            actions += TimedAction(22, AnimationAction.WriteMemory(
+                (resultAddr + i).toInt(), byte,
+                isAllocated = true, isPointer = false, isWriting = true, regionTag = "DATA"
+            ))
+        }
         actions += TimedAction(23, AnimationAction.UpdateResultFlow("REGISTER", "DISPLAY", progress = 1.0f))
         actions += TimedAction(23, AnimationAction.UpdateDisplayBuffer(result.toString(), result.toString().length, isTyping = false))
-        actions += TimedAction(23, AnimationAction.WriteMemory(resultAddr.toInt(), rawBits.toByte(), isAllocated = true, isPointer = false, isWriting = false))
+        resultBytes.forEachIndexed { i, byte ->
+            actions += TimedAction(23, AnimationAction.WriteMemory(
+                (resultAddr + i).toInt(), byte,
+                isAllocated = true, isPointer = false, isWriting = false, regionTag = "DATA"
+            ))
+        }
         actions += TimedAction(24, AnimationAction.UpdateRegister(0, result.toLong(), isHighlighted = false))
         actions += TimedAction(24, AnimationAction.ExitPhase(
             PipelinePhase.PHASE_OUTPUT,
@@ -357,14 +468,14 @@ object VisualizationEngine {
             MemoryOpType.STORE -> "MS"
         }
         val seg = deriveSegment(label)
-        val addr = deriveAddress(type.ordinal.toDouble(), 0)
+        val addr = deriveAddress(type.ordinal.toLong(), 0)
         actions += TimedAction(0, AnimationAction.UpdateDescription("内存操作: $label"))
         actions += TimedAction(1, AnimationAction.UpdateAddressBus(
             segment = seg, offset = addr,
             fullAddress = (seg shl 16) + addr, progress = 0.5f
         ))
-        actions += TimedAction(2, AnimationAction.WriteMemory(addr.toInt(), 0, isAllocated = true, isPointer = false, isWriting = true))
-        actions += TimedAction(3, AnimationAction.WriteMemory(addr.toInt(), 0, isAllocated = true, isPointer = false, isWriting = false))
+        actions += TimedAction(2, AnimationAction.WriteMemory(addr.toInt(), 0, isAllocated = true, isPointer = false, isWriting = true, regionTag = "DATA"))
+        actions += TimedAction(3, AnimationAction.WriteMemory(addr.toInt(), 0, isAllocated = true, isPointer = false, isWriting = false, regionTag = "DATA"))
         val total = 4L
         actions += TimedAction(total, AnimationAction.SetDuration(total))
         return AnimationScript(actions, total)
@@ -423,19 +534,34 @@ object VisualizationEngine {
     }
 
     /**
-     * 基于表达式字符串生成确定性段寄存器值（替代硬编码 0x0007）
+     * 基于表达式字符串生成确定性段寄存器值（FNV-1a 哈希，避免碰撞）
      */
     private fun deriveSegment(expression: String): Long {
-        val hash = expression.hashCode()
-        return ((hash ushr 16) and 0xFFFF).toLong().coerceAtLeast(1)
+        var hash = 0x811c9dc5L
+        for (ch in expression) {
+            hash = hash xor ch.code.toLong()
+            hash *= 0x01000193L
+        }
+        return (hash and 0xFFFF).coerceAtLeast(1)
     }
 
     /**
-     * 基于操作数值和索引生成确定性内存地址（替代硬编码 0x1000/0x1008）
+     * 基于 64-bit seed 和索引生成确定性内存地址（完整位混合，避免碰撞）
      */
-    private fun deriveAddress(operandValue: Double, index: Int): Long {
-        val hash = operandValue.toRawBits().hashCode()
-        return 0x1000L + ((hash and 0xFF) * 8L) + index * 8L
+    private fun deriveAddress(seed: Long, index: Int): Long {
+        // 使用 PCG random 乘数（在 Long 范围内）+ 位旋转混合，避免碰撞
+        val mul1 = 0x5851F42D4C957F2DL
+        val mul2 = 0x14057B7EF767814FL
+        val mixed = seed * mul1 + index * mul2
+        return 0x1000L + (mixed and 0xFFFFL)
+    }
+
+    /**
+     * 将 Double 的 64-bit IEEE 754 表示拆分为 8 个 Byte
+     */
+    private fun doubleToBytes(value: Double): List<Byte> {
+        val raw = value.toRawBits()
+        return List(8) { i -> ((raw ushr (i * 8)) and 0xFF).toByte() }
     }
 
     /**

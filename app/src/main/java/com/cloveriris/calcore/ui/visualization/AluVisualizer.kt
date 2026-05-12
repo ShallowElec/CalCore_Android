@@ -19,6 +19,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -72,7 +73,7 @@ fun AluVisualizer(
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp)
+                .height(96.dp)
         ) {
             if (operation == null) {
                 val idleLayout = textMeasurer.measure(
@@ -94,11 +95,11 @@ fun AluVisualizer(
             }
 
             val boxWidth = 88.dp.toPx()
-            val boxHeight = 44.dp.toPx()
+            val boxHeight = 40.dp.toPx()
             val opGap = 16.dp.toPx()
             val totalWidth = boxWidth * 3 + opGap * 4
             val startX = (size.width - totalWidth) / 2
-            val centerY = size.height / 2
+            val centerY = 30.dp.toPx()
 
             val opSymbol = when (operation.operation) {
                 "ADD" -> "+"
@@ -120,13 +121,13 @@ fun AluVisualizer(
             if (operation.isActive) {
                 drawRect(
                     color = TerminalAmber.copy(alpha = flickerAlpha * 0.12f),
-                    topLeft = Offset(startX - opGap / 2, centerY - boxHeight / 2 - 6.dp.toPx()),
-                    size = Size(totalWidth + opGap, boxHeight + 12.dp.toPx())
+                    topLeft = Offset(startX - opGap / 2, centerY - boxHeight / 2 - 4.dp.toPx()),
+                    size = Size(totalWidth + opGap, boxHeight + 8.dp.toPx())
                 )
                 drawRect(
                     color = TerminalAmber.copy(alpha = flickerAlpha * 0.5f),
-                    topLeft = Offset(startX - opGap / 2, centerY - boxHeight / 2 - 6.dp.toPx()),
-                    size = Size(totalWidth + opGap, boxHeight + 12.dp.toPx()),
+                    topLeft = Offset(startX - opGap / 2, centerY - boxHeight / 2 - 4.dp.toPx()),
+                    size = Size(totalWidth + opGap, boxHeight + 8.dp.toPx()),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx())
                 )
             }
@@ -141,6 +142,22 @@ fun AluVisualizer(
             drawAluOperator(startX + boxWidth * 2 + opGap * 1.5f, centerY, "=", textMeasurer)
             // 结果
             drawHexBox(startX + boxWidth * 2 + opGap * 2, centerY - boxHeight / 2, boxWidth, boxHeight, resultHex, textMeasurer, isResult = true)
+
+            // ===== 位运算细节条（底部） =====
+            if (operation.isActive) {
+                val detailY = centerY + boxHeight / 2 + 8.dp.toPx()
+                when (operation.operation) {
+                    "ADD", "SUB" -> drawCarryRippleDetail(
+                        startX, detailY, boxWidth, operation.left, operation.right, operation.result,
+                        textMeasurer, flickerAlpha
+                    )
+                    "AND", "OR", "XOR" -> drawBitwiseGateDetail(
+                        startX, detailY, boxWidth, opGap, operation.operation,
+                        operation.left, operation.right, operation.result, textMeasurer
+                    )
+                    else -> { /* 其他运算不展示细节 */ }
+                }
+            }
         }
     }
 }
@@ -202,6 +219,164 @@ private fun DrawScope.drawAluOperator(
             x - textLayout.size.width / 2,
             y - textLayout.size.height / 2
         )
+    )
+}
+
+/**
+ * ADD/SUB 进位传播细节：展示最低 4 位的逐位运算与进位链
+ */
+private fun DrawScope.drawCarryRippleDetail(
+    startX: Float, y: Float, boxWidth: Float,
+    left: Long, right: Long, result: Long,
+    textMeasurer: TextMeasurer, flickerAlpha: Float
+) {
+    val bitCount = 4
+    val bitW = boxWidth / bitCount
+    val bitH = 14.dp.toPx()
+    val gap = 2.dp.toPx()
+
+    // 提取最低 4 位
+    val leftBits = List(bitCount) { i -> ((left shr i) and 1) == 1L }
+    val rightBits = List(bitCount) { i -> ((right shr i) and 1) == 1L }
+    val resultBits = List(bitCount) { i -> ((result shr i) and 1) == 1L }
+
+    // 绘制每一位的运算框
+    for (i in 0 until bitCount) {
+        val bx = startX + (bitCount - 1 - i) * bitW
+        val bitIndex = i // 从 LSB 开始
+
+        // 左操作数位
+        drawBitCell(bx, y, bitW - gap, bitH, leftBits[bitIndex], textMeasurer, isTop = true)
+        // 右操作数位
+        drawBitCell(bx, y + bitH + 2.dp.toPx(), bitW - gap, bitH, rightBits[bitIndex], textMeasurer, isTop = false)
+        // 结果位
+        drawBitCell(bx, y + bitH * 2 + 6.dp.toPx(), bitW - gap, bitH, resultBits[bitIndex], textMeasurer, isResult = true)
+
+        // 进位连接线（相邻位之间）
+        if (i < bitCount - 1) {
+            val lineY = y + bitH * 2 + 6.dp.toPx() + bitH / 2
+            val fromX = bx + bitW / 2
+            val toX = bx + bitW + gap / 2
+            drawLine(
+                color = TerminalGreen.copy(alpha = 0.2f + 0.3f * flickerAlpha),
+                start = Offset(fromX, lineY),
+                end = Offset(toX, lineY),
+                strokeWidth = 1.dp.toPx()
+            )
+            // 进位箭头（从低位指向高位，即从左到右）
+            drawLine(
+                color = TerminalAmber.copy(alpha = 0.4f * flickerAlpha),
+                start = Offset(fromX + 4.dp.toPx(), lineY - 2.dp.toPx()),
+                end = Offset(fromX + 8.dp.toPx(), lineY),
+                strokeWidth = 1.dp.toPx()
+            )
+            drawLine(
+                color = TerminalAmber.copy(alpha = 0.4f * flickerAlpha),
+                start = Offset(fromX + 4.dp.toPx(), lineY + 2.dp.toPx()),
+                end = Offset(fromX + 8.dp.toPx(), lineY),
+                strokeWidth = 1.dp.toPx()
+            )
+        }
+    }
+
+    // "CARRY RIPPLE" 标签
+    val labelLayout = textMeasurer.measure(
+        "CARRY",
+        TextStyle(color = TerminalGray.copy(alpha = 0.4f), fontSize = 7.sp, fontFamily = FontFamily.Monospace)
+    )
+    drawText(labelLayout, topLeft = Offset(startX + boxWidth + 4.dp.toPx(), y + bitH))
+}
+
+/**
+ * 位运算逻辑门细节：展示 AND/OR/XOR 的逐位逻辑门
+ */
+private fun DrawScope.drawBitwiseGateDetail(
+    startX: Float, y: Float, boxWidth: Float, opGap: Float,
+    op: String, left: Long, right: Long, result: Long,
+    textMeasurer: TextMeasurer
+) {
+    val bitCount = 4
+    val bitW = boxWidth / bitCount
+    val bitH = 14.dp.toPx()
+    val gap = 2.dp.toPx()
+
+    val leftBits = List(bitCount) { i -> ((left shr i) and 1) == 1L }
+    val rightBits = List(bitCount) { i -> ((right shr i) and 1) == 1L }
+    val resultBits = List(bitCount) { i -> ((result shr i) and 1) == 1L }
+
+    for (i in 0 until bitCount) {
+        val bx = startX + (bitCount - 1 - i) * bitW
+        val bitIndex = i
+
+        // 输入位（上下排列）
+        drawBitCell(bx, y, bitW - gap, bitH, leftBits[bitIndex], textMeasurer, isTop = true)
+        drawBitCell(bx, y + bitH + 2.dp.toPx(), bitW - gap, bitH, rightBits[bitIndex], textMeasurer, isTop = false)
+
+        // 逻辑门符号（居中）
+        val gateSymbol = when (op) {
+            "AND" -> "&"
+            "OR" -> "|"
+            "XOR" -> "^"
+            else -> "?"
+        }
+        val gateLayout = textMeasurer.measure(
+            gateSymbol,
+            TextStyle(color = TerminalGray.copy(alpha = 0.5f), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        )
+        drawText(
+            gateLayout,
+            topLeft = Offset(
+                bx + (bitW - gap - gateLayout.size.width) / 2,
+                y + bitH + 2.dp.toPx() + bitH + 2.dp.toPx()
+            )
+        )
+
+        // 结果位
+        drawBitCell(bx, y + bitH * 2 + 14.dp.toPx(), bitW - gap, bitH, resultBits[bitIndex], textMeasurer, isResult = true)
+
+        // 连线（输入→门→输出）
+        val centerX = bx + (bitW - gap) / 2
+        drawLine(
+            color = TerminalGreen.copy(alpha = 0.2f),
+            start = Offset(centerX, y + bitH),
+            end = Offset(centerX, y + bitH * 2 + 14.dp.toPx()),
+            strokeWidth = 0.5f.dp.toPx()
+        )
+    }
+}
+
+private fun DrawScope.drawBitCell(
+    x: Float, y: Float, w: Float, h: Float,
+    bit: Boolean, textMeasurer: TextMeasurer,
+    isTop: Boolean = false, isResult: Boolean = false
+) {
+    val bgColor = when {
+        isResult && bit -> TerminalGreen.copy(alpha = 0.6f)
+        isResult -> Color(0xFF1F1F1F)
+        bit -> TerminalGreen.copy(alpha = 0.25f)
+        else -> Color(0xFF1A1A1A)
+    }
+    val borderColor = when {
+        isResult && bit -> TerminalGreen
+        isResult -> TerminalGray.copy(alpha = 0.2f)
+        bit -> TerminalGreen.copy(alpha = 0.4f)
+        else -> Color(0xFF2A2A2A)
+    }
+    drawRect(color = bgColor, topLeft = Offset(x, y), size = Size(w, h))
+    drawRect(color = borderColor, topLeft = Offset(x, y), size = Size(w, h), style = Stroke(width = 0.5f.dp.toPx()))
+
+    val text = if (bit) "1" else "0"
+    val textLayout = textMeasurer.measure(
+        text,
+        TextStyle(
+            color = if (bit && isResult) Color.Black else if (bit) TerminalGreen else TerminalGray.copy(alpha = 0.4f),
+            fontSize = 8.sp,
+            fontFamily = FontFamily.Monospace
+        )
+    )
+    drawText(
+        textLayout,
+        topLeft = Offset(x + (w - textLayout.size.width) / 2, y + (h - textLayout.size.height) / 2)
     )
 }
 

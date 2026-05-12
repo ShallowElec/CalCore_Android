@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -52,6 +53,26 @@ fun BitGrid(
 ) {
     val textMeasurer = rememberTextMeasurer()
 
+    // 位翻转动画状态：每个索引对应一个 Animatable（0f=正常, 1f=翻转峰值）
+    val flipAnims = remember { mutableStateMapOf<Int, Animatable<Float, *>>() }
+    val prevBits = remember(bits) { bits.toList() }
+
+    // 检测位翻转并触发动画（波浪式延迟）
+    LaunchedEffect(bits) {
+        val flipped = bits.indices.filter { i ->
+            i < prevBits.size && bits[i] != prevBits[i]
+        }
+        flipped.forEachIndexed { waveIndex, bitIndex ->
+            val anim = flipAnims.getOrPut(bitIndex) { Animatable(0f) }
+            anim.snapTo(0f)
+            // 波浪延迟：从左到右（或从高位到低位）依次翻转
+            val delayMs = waveIndex * 18L
+            kotlinx.coroutines.delay(delayMs)
+            anim.animateTo(1f, tween(180))
+            anim.animateTo(0f, tween(220))
+        }
+    }
+
     Canvas(
         modifier = when (layout) {
             BitGridLayout.GRID_8X8 -> modifier
@@ -65,8 +86,8 @@ fun BitGrid(
         }
     ) {
         when (layout) {
-            BitGridLayout.GRID_8X8 -> drawBitGrid8x8(bits, labels, textMeasurer, highlights)
-            BitGridLayout.BAR_1X64 -> drawBitGrid1x64(bits, labels, textMeasurer, highlights, label)
+            BitGridLayout.GRID_8X8 -> drawBitGrid8x8(bits, labels, textMeasurer, highlights, flipAnims)
+            BitGridLayout.BAR_1X64 -> drawBitGrid1x64(bits, labels, textMeasurer, highlights, label, flipAnims)
         }
     }
 }
@@ -75,7 +96,8 @@ private fun DrawScope.drawBitGrid8x8(
     bits: List<Boolean>,
     labels: List<String>?,
     textMeasurer: TextMeasurer,
-    highlights: Set<Int>
+    highlights: Set<Int>,
+    flipAnims: Map<Int, Animatable<Float, *>>
 ) {
     val cellSize = size.width / 8f
     val gap = 2.dp.toPx()
@@ -87,11 +109,30 @@ private fun DrawScope.drawBitGrid8x8(
         val x = col * cellSize + gap / 2
         val y = row * cellSize + gap / 2
         val bit = bits.getOrElse(i) { false }
+        val flipProgress = flipAnims[i]?.value ?: 0f
+
+        // 翻转时的缩放和发光
+        val scale = 1f + flipProgress * 0.35f
+        val glowAlpha = flipProgress * 0.6f
+        val cellCenterX = x + actualCell / 2
+        val cellCenterY = y + actualCell / 2
+        val scaledCell = actualCell * scale
+        val sx = cellCenterX - scaledCell / 2
+        val sy = cellCenterY - scaledCell / 2
+
+        // 发光背景（翻转时白色闪光）
+        if (flipProgress > 0.01f) {
+            drawRect(
+                color = Color.White.copy(alpha = glowAlpha),
+                topLeft = Offset(sx - 2.dp.toPx(), sy - 2.dp.toPx()),
+                size = Size(scaledCell + 4.dp.toPx(), scaledCell + 4.dp.toPx())
+            )
+        }
 
         drawRect(
             color = if (bit) TerminalGreen else Color(0xFF1F1F1F),
-            topLeft = Offset(x, y),
-            size = Size(actualCell, actualCell)
+            topLeft = Offset(sx, sy),
+            size = Size(scaledCell, scaledCell)
         )
 
         // 绘制位值（0/1）
@@ -107,8 +148,8 @@ private fun DrawScope.drawBitGrid8x8(
         drawText(
             textLayout,
             topLeft = Offset(
-                x + (actualCell - textLayout.size.width) / 2,
-                y + (actualCell - textLayout.size.height) / 2
+                cellCenterX - textLayout.size.width / 2,
+                cellCenterY - textLayout.size.height / 2
             )
         )
 
@@ -121,6 +162,16 @@ private fun DrawScope.drawBitGrid8x8(
                 style = Stroke(width = 2.dp.toPx())
             )
         }
+
+        // 翻转时的脉冲边框
+        if (flipProgress > 0.01f) {
+            drawRect(
+                color = TerminalGreen.copy(alpha = flipProgress * 0.8f),
+                topLeft = Offset(sx - 1.dp.toPx(), sy - 1.dp.toPx()),
+                size = Size(scaledCell + 2.dp.toPx(), scaledCell + 2.dp.toPx()),
+                style = Stroke(width = 1.5f.dp.toPx())
+            )
+        }
     }
 }
 
@@ -129,7 +180,8 @@ private fun DrawScope.drawBitGrid1x64(
     labels: List<String>?,
     textMeasurer: TextMeasurer,
     highlights: Set<Int>,
-    label: String
+    label: String,
+    flipAnims: Map<Int, Animatable<Float, *>>
 ) {
     val showIeee754 = label.contains("IEEE 754", ignoreCase = true) || label.contains("DOUBLE", ignoreCase = true)
     val topPadding = if (showIeee754 || highlights.isNotEmpty()) 18.dp.toPx() else 0f
@@ -148,11 +200,27 @@ private fun DrawScope.drawBitGrid1x64(
         val x = i * cellWidth + gap / 2
         val y = topPadding
         val bit = bits.getOrElse(i) { false }
+        val flipProgress = flipAnims[i]?.value ?: 0f
+
+        val scaleY = 1f + flipProgress * 0.5f
+        val glowAlpha = flipProgress * 0.5f
+        val cellCenterY = y + height / 2
+        val scaledHeight = height * scaleY
+        val sy = cellCenterY - scaledHeight / 2
+
+        // 发光背景
+        if (flipProgress > 0.01f) {
+            drawRect(
+                color = Color.White.copy(alpha = glowAlpha),
+                topLeft = Offset(x - 1.dp.toPx(), sy - 1.dp.toPx()),
+                size = Size(actualWidth + 2.dp.toPx(), scaledHeight + 2.dp.toPx())
+            )
+        }
 
         drawRect(
             color = if (bit) TerminalGreen else Color(0xFF1F1F1F),
-            topLeft = Offset(x, y),
-            size = Size(actualWidth, height)
+            topLeft = Offset(x, sy),
+            size = Size(actualWidth, scaledHeight)
         )
 
         // L2 高亮三角形标记（琥珀色）
@@ -170,6 +238,16 @@ private fun DrawScope.drawBitGrid1x64(
             drawPath(
                 path = triangle,
                 color = TerminalAmber
+            )
+        }
+
+        // 翻转时的脉冲边框
+        if (flipProgress > 0.01f) {
+            drawRect(
+                color = TerminalGreen.copy(alpha = flipProgress * 0.7f),
+                topLeft = Offset(x - 0.5f.dp.toPx(), sy - 0.5f.dp.toPx()),
+                size = Size(actualWidth + 1.dp.toPx(), scaledHeight + 1.dp.toPx()),
+                style = Stroke(width = 1.dp.toPx())
             )
         }
     }

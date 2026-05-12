@@ -54,7 +54,8 @@ sealed class AnimationAction {
         val value: Byte,
         val isAllocated: Boolean = true,
         val isPointer: Boolean = false,
-        val isWriting: Boolean = false // 正在写入动画中
+        val isWriting: Boolean = false, // 正在写入动画中
+        val regionTag: String = ""      // STACK / HEAP / DATA / CONST
     ) : AnimationAction()
 
     /** 内存指针连线生长动画 */

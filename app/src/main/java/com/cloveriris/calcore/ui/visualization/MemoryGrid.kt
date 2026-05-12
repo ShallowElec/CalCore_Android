@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.presentation.visualization.MemoryPointerAnimationState
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
+import com.cloveriris.calcore.ui.theme.SkyBlue
 import com.cloveriris.calcore.ui.theme.TerminalAmber
 import com.cloveriris.calcore.ui.theme.TerminalGreen
 import com.cloveriris.calcore.ui.theme.TerminalGray
@@ -48,7 +49,8 @@ data class MemoryCellVisual(
     val value: Byte,
     val isAllocated: Boolean = true,
     val isPointer: Boolean = false,
-    val isWriting: Boolean = false
+    val isWriting: Boolean = false,
+    val regionTag: String = "" // STACK / HEAP / DATA / CONST
 )
 
 @Composable
@@ -89,6 +91,9 @@ fun MemoryGrid(
         val cellWidth = (size.width - addrColWidth) / columns
         val cellHeight = 28.dp.toPx()
         val gap = 2.dp.toPx()
+
+        // 绘制区域标签条（STACK / HEAP / DATA / CONST）
+        drawRegionLabels(cells, rows, columns, addrColWidth, cellWidth, cellHeight, gap, textMeasurer)
 
         // 绘制网格背景线（所有单元格的基础网格）
         drawBaseGrid(rows, columns, addrColWidth, cellWidth, cellHeight, gap)
@@ -245,6 +250,88 @@ fun MemoryGrid(
                 drawGrowingPointerArrow(
                     sIdx, tIdx, columns, addrColWidth, cellWidth, cellHeight, gap,
                     TerminalGreen, pointerAnimation.progress
+                )
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawRegionLabels(
+    cells: List<MemoryCellVisual>,
+    rows: Int, columns: Int,
+    addrColWidth: Float, cellWidth: Float, cellHeight: Float, gap: Float,
+    textMeasurer: TextMeasurer
+) {
+    if (cells.isEmpty()) return
+
+    // 区域颜色映射
+    val regionColor: (String) -> Color = { tag ->
+        when (tag) {
+            "STACK" -> TerminalGray.copy(alpha = 0.6f)
+            "HEAP" -> SkyBlue.copy(alpha = 0.7f)
+            "CONST" -> TerminalAmber.copy(alpha = 0.7f)
+            else -> TerminalGreen.copy(alpha = 0.6f) // DATA
+        }
+    }
+
+    for (r in 0 until rows) {
+        // 收集该行所有 cell 的 regionTag 及列范围
+        val rowRegions = mutableListOf<Pair<IntRange, String>>()
+        var currentStart = -1
+        var currentTag = ""
+
+        for (c in 0 until columns) {
+            val idx = r * columns + c
+            val cell = cells.getOrNull(idx) ?: continue
+            val tag = cell.regionTag.ifEmpty { continue }
+            if (tag != currentTag) {
+                if (currentStart >= 0) {
+                    rowRegions.add((currentStart until c) to currentTag)
+                }
+                currentStart = c
+                currentTag = tag
+            }
+        }
+        if (currentStart >= 0) {
+            rowRegions.add((currentStart until columns) to currentTag)
+        }
+
+        // 绘制区域标签
+        val labelY = r * cellHeight + gap / 2 + 2.dp.toPx()
+        rowRegions.forEach { (colRange, tag) ->
+            val startX = addrColWidth + colRange.first * cellWidth + gap / 2
+            val endX = addrColWidth + (colRange.last + 1) * cellWidth - gap / 2
+            val width = endX - startX
+
+            // 标签背景条
+            drawRect(
+                color = regionColor(tag).copy(alpha = 0.12f),
+                topLeft = Offset(startX, labelY),
+                size = Size(width, 12.dp.toPx())
+            )
+            drawRect(
+                color = regionColor(tag).copy(alpha = 0.35f),
+                topLeft = Offset(startX, labelY),
+                size = Size(width, 12.dp.toPx()),
+                style = Stroke(width = 0.5f.dp.toPx())
+            )
+
+            // 标签文字
+            val labelLayout = textMeasurer.measure(
+                tag,
+                TextStyle(
+                    color = regionColor(tag),
+                    fontSize = 7.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            )
+            if (width > labelLayout.size.width + 4.dp.toPx()) {
+                drawText(
+                    labelLayout,
+                    topLeft = Offset(
+                        startX + (width - labelLayout.size.width) / 2,
+                        labelY + (12.dp.toPx() - labelLayout.size.height) / 2
+                    )
                 )
             }
         }

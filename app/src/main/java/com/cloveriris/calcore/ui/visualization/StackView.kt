@@ -109,6 +109,21 @@ fun StackView(
             val targetY = stackStartY + topFrameIndex * (rowHeight + gap)
             val currentY = regAreaHeight - rowHeight + (targetY - (regAreaHeight - rowHeight)) * animProgress.value
             val alpha = 0.3f + 0.7f * animProgress.value
+
+            // 发光拖尾残影（3 个渐淡影子）
+            val trailSteps = 3
+            for (t in 1..trailSteps) {
+                val trailY = currentY - t * (rowHeight * 0.4f)
+                if (trailY > regAreaHeight - rowHeight) {
+                    val trailAlpha = alpha * (1f - t / (trailSteps + 1f)) * 0.25f
+                    drawRect(
+                        color = TerminalGreen.copy(alpha = trailAlpha),
+                        topLeft = Offset(0f, trailY),
+                        size = Size(frameWidth, rowHeight)
+                    )
+                }
+            }
+
             drawStackBlock(
                 x = 0f, y = currentY,
                 width = frameWidth, height = rowHeight,
@@ -127,6 +142,21 @@ fun StackView(
             val targetY = regAreaHeight - rowHeight
             val currentY = startY + (targetY - startY) * animProgress.value
             val alpha = 1.0f - 0.7f * animProgress.value
+
+            // 发光拖尾残影
+            val trailSteps = 3
+            for (t in 1..trailSteps) {
+                val trailY = currentY + t * (rowHeight * 0.4f)
+                if (trailY < startY + rowHeight) {
+                    val trailAlpha = alpha * (1f - t / (trailSteps + 1f)) * 0.25f
+                    drawRect(
+                        color = TerminalGreen.copy(alpha = trailAlpha),
+                        topLeft = Offset(0f, trailY),
+                        size = Size(frameWidth, rowHeight)
+                    )
+                }
+            }
+
             drawStackBlock(
                 x = 0f, y = currentY,
                 width = frameWidth, height = rowHeight,

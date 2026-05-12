@@ -214,19 +214,30 @@ private fun DrawScope.drawBusFlowCurve(
         style = Stroke(width = 1.5.dp.toPx())
     )
 
-    // 沿贝塞尔曲线的流光点
+    // 沿贝塞尔曲线的流光点（增强版：更多粒子 + 白色头部 + 发光）
     val controlX = (start.x + end.x) / 2
     val controlY = start.y + (end.y - start.y) * 0.2f
 
-    val steps = 7
+    val steps = 10
     for (i in 0..steps) {
-        val t = progress - (i / steps.toFloat()) * 0.18f
+        val t = progress - (i / steps.toFloat()) * 0.16f
         if (t < 0f || t > 1f) continue
         val pos = quadBezier(t, start, Offset(controlX, controlY), end)
         val alpha = (1f - i / steps.toFloat()).coerceIn(0.1f, 1f)
-        val radius = (3f - i * 0.25f).dp.toPx()
+        val radius = (4f - i * 0.28f).coerceAtLeast(1.2f).dp.toPx()
+        val color = when {
+            i == 0 -> Color.White
+            i <= 3 -> TerminalGreen.copy(alpha = 1f)
+            else -> TerminalGreen
+        }
+        // 发光外圈
         drawCircle(
-            color = TerminalGreen.copy(alpha = alpha),
+            color = color.copy(alpha = alpha * 0.25f),
+            radius = radius * 2.5f,
+            center = pos
+        )
+        drawCircle(
+            color = color.copy(alpha = alpha),
             radius = radius,
             center = pos
         )

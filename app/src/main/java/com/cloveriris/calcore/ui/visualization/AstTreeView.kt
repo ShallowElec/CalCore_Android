@@ -1,6 +1,11 @@
 package com.cloveriris.calcore.ui.visualization
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -19,8 +24,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -157,13 +166,37 @@ private fun AstNode(
             // 子节点
             val children = expressionChildren(expression)
             if (children.isNotEmpty()) {
-                // 连线
+                // 连线生长动画
+                val wireThreshold = threshold + 0.15f
+                val wireVisible = growthProgress >= wireThreshold
+                val wireScale = if (wireVisible) ((growthProgress - wireThreshold) / 0.15f).coerceIn(0f, 1f) else 0f
+
+                // 数据流光点（从父节点流向子节点）
+                val flowProgress = remember(growthProgress, depth) { Animatable(0f) }
+                LaunchedEffect(growthProgress) {
+                    if (growthProgress >= wireThreshold && growthProgress < 1f) {
+                        flowProgress.animateTo(1f, tween(400))
+                    }
+                }
+                val flowY = if (wireVisible) (1f - flowProgress.value) * 12.dp.value else 0f
+
                 Box(
                     modifier = Modifier
                         .width(2.dp)
                         .height(12.dp)
-                        .background(TerminalGray.copy(alpha = 0.3f))
-                )
+                        .scale(scaleX = 1f, scaleY = wireScale)
+                        .background(TerminalGray.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    if (wireVisible && flowProgress.value > 0.01f && flowProgress.value < 0.99f) {
+                        Box(
+                            modifier = Modifier
+                                .width(2.dp)
+                                .height(4.dp)
+                                .background(TerminalGreen.copy(alpha = 0.8f))
+                        )
+                    }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
