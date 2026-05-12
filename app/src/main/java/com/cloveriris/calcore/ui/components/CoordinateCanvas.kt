@@ -1,12 +1,17 @@
 package com.cloveriris.calcore.ui.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
@@ -35,27 +40,67 @@ fun CoordinateCanvas(
 
     Canvas(
         modifier = modifier
-            .pointerInput(Unit) {
-                detectTransformGestures { centroid, pan, zoom, _ ->
-                    val newScale = (viewport.scale * zoom)
-                        .coerceIn(ViewportState.MIN_SCALE, ViewportState.MAX_SCALE)
-                    // 先平移
-                    val panCenterX = viewport.centerX - pan.x / viewport.scale
-                    val panCenterY = viewport.centerY + pan.y / viewport.scale
-                    // 以双指中心为锚点缩放：保持该点世界坐标不变
-                    val (centroidWorldX, centroidWorldY) = viewport.screenToWorld(
-                        centroid.x, centroid.y, size.width.toFloat(), size.height.toFloat()
-                    )
-                    val newCenterX = centroidWorldX - (centroid.x - size.width / 2f) / newScale
-                    val newCenterY = centroidWorldY + (centroid.y - size.height / 2f) / newScale
+            // 手势处理：pointerInput 随 viewport 变化而重启，避免 stale closure
+            .pointerInput(viewport) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    var pointer = down
+                    var accumulatedPan = Offset.Zero
 
-                    onViewportChange(
-                        viewport.copy(
-                            centerX = newCenterX,
-                            centerY = newCenterY,
-                            scale = newScale
+                    do {
+                        val event = awaitPointerEvent()
+                        val changes = event.changes
+
+                        // 计算缩放（需要至少 2 个指针）
+                        val zoom = if (changes.size >= 2) {
+                            event.calculateZoom()
+                        } else 1f
+
+                        // 计算平移（单指/双指都支持）
+                        val pan = event.calculatePan()
+                        accumulatedPan += pan
+
+                        // 应用变换
+                        val newScale = (viewport.scale * zoom)
+                            .coerceIn(ViewportState.MIN_SCALE, ViewportState.MAX_SCALE)
+
+                        // 先应用平移
+                        val panCenterX = viewport.centerX - pan.x / viewport.scale
+                        val panCenterY = viewport.centerY + pan.y / viewport.scale
+
+                        // 再应用缩放（以双指中心或单指位置为锚点）
+                        val (anchorX, anchorY) = if (changes.size >= 2) {
+                            // 双指：以两指中心为锚点
+                            val centroid = changes.fold(Offset.Zero) { acc, c ->
+                                acc + c.position
+                            } / changes.size.toFloat()
+                            viewport.screenToWorld(
+                                centroid.x, centroid.y,
+                                size.width.toFloat(), size.height.toFloat()
+                            )
+                        } else {
+                            // 单指：以当前指针位置为锚点
+                            viewport.screenToWorld(
+                                changes.first().position.x,
+                                changes.first().position.y,
+                                size.width.toFloat(), size.height.toFloat()
+                            )
+                        }
+
+                        val newCenterX = anchorX - (anchorX - panCenterX) / zoom
+                        val newCenterY = anchorY - (anchorY - panCenterY) / zoom
+
+                        onViewportChange(
+                            viewport.copy(
+                                centerX = newCenterX,
+                                centerY = newCenterY,
+                                scale = newScale
+                            )
                         )
-                    )
+
+                        // 消费所有变化
+                        changes.forEach { it.consume() }
+                    } while (changes.any { it.pressed })
                 }
             }
     ) {
@@ -132,7 +177,6 @@ private fun DrawScope.drawGrid(
             end = Offset(sx, height),
             strokeWidth = 0.5f
         )
-        // 刻度标签（仅在 X 轴附近或底部显示）
         val (_, originY) = viewport.worldToScreen(0.0, 0.0, width, height)
         val labelY = if (originY in 8f..height - 8f) originY + 14f else height - 6f
         if (sx in 8f..width - 8f && kotlin.math.abs(x) > baseSpacing * 0.001) {
@@ -155,7 +199,6 @@ private fun DrawScope.drawGrid(
             end = Offset(width, sy),
             strokeWidth = 0.5f
         )
-        // 刻度标签（仅在 Y 轴附近或左侧显示）
         val (originX, _) = viewport.worldToScreen(0.0, 0.0, width, height)
         val labelX = if (originX in 20f..width - 20f) originX - 4f else 4f
         if (sy in 10f..height - 10f && kotlin.math.abs(y) > baseSpacing * 0.001) {
@@ -201,7 +244,6 @@ private fun DrawScope.drawPolyline(
     for (i in 0 until points.size - 1) {
         val a = points[i]
         val b = points[i + 1]
-        // 跳过跨屏跳跃（如 1/x 的断点两侧）
         if ((a - b).getDistance() > maxJump) continue
         drawLine(
             color = shape.color,

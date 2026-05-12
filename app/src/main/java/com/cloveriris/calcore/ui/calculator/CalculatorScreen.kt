@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import com.cloveriris.calcore.domain.model.CalculatorInput
 import com.cloveriris.calcore.domain.model.CalculatorMode
+import com.cloveriris.calcore.domain.model.CalculatorState
 import com.cloveriris.calcore.domain.model.NumberBase
 import com.cloveriris.calcore.domain.model.SidePanelTab
 import com.cloveriris.calcore.presentation.calculator.CalculatorUiState
@@ -190,8 +191,10 @@ private fun PortraitLayout(
     onToggleLevel: (com.cloveriris.calcore.domain.model.VisualizationLevel) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val isEvaluating = uiState.state is CalculatorState.Evaluated && visState.isPlaying
+
     Column(modifier = modifier.fillMaxSize()) {
-        // 顶部栏
+        // 顶部栏（始终显示）
         CalculatorHeader(
             mode = uiState.mode,
             activeTab = uiState.activeTab,
@@ -200,111 +203,83 @@ private fun PortraitLayout(
             onOpenDrawer = onOpenDrawer
         )
 
-        // 可折叠可视化面板（仅当 Tab 为 NONE 或 VISUALIZATION 时显示）
-        if (uiState.activeTab == SidePanelTab.NONE || uiState.activeTab == SidePanelTab.VISUALIZATION) {
-            CollapsibleVisualizationPanel(
+        if (isEvaluating) {
+            // ===== 计算模式：Display 缩小 + 全屏可视化 =====
+            if (uiState.mode == CalculatorMode.PROGRAMMER) {
+                ProgrammerDisplay(
+                    value = uiState.programmerValue,
+                    base = uiState.numberBase,
+                    bitWidth = uiState.bitWidth,
+                    modifier = Modifier.fillMaxWidth().weight(0.22f)
+                )
+            } else {
+                CalcoreDisplay(
+                    expression = uiState.state.displayExpression,
+                    result = uiState.state.displayResult,
+                    modifier = Modifier.fillMaxWidth().weight(0.22f)
+                )
+            }
+
+            VisualizationStage(
                 state = visState,
-                isExpanded = visState.isPanelExpanded,
-                onToggleExpand = onToggleVisPanel,
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 onPlayPause = onVisPlayPause,
                 onScrub = onVisScrub,
-                onRestart = onVisRestart
-            )
-        }
-
-        // 显示区
-        if (uiState.mode == CalculatorMode.PROGRAMMER) {
-            ProgrammerDisplay(
-                value = uiState.programmerValue,
-                base = uiState.numberBase,
-                bitWidth = uiState.bitWidth,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.8f)
+                onRestart = onVisRestart,
+                onToggleLevel = onToggleLevel
             )
         } else {
-            CalcoreDisplay(
-                expression = uiState.state.displayExpression,
-                result = uiState.state.displayResult,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.8f)
-            )
-        }
+            // ===== 正常模式 =====
+            // 可折叠可视化面板
+            if (uiState.activeTab == SidePanelTab.NONE || uiState.activeTab == SidePanelTab.VISUALIZATION) {
+                CollapsibleVisualizationPanel(
+                    state = visState,
+                    isExpanded = visState.isPanelExpanded,
+                    onToggleExpand = onToggleVisPanel,
+                    onPlayPause = onVisPlayPause,
+                    onScrub = onVisScrub,
+                    onRestart = onVisRestart
+                )
+            }
 
-        // 内容区：按键 / 历史 / 内存 / 可视化
-        when (uiState.activeTab) {
-            SidePanelTab.HISTORY -> {
-                HistoryPanel(
-                    history = uiState.history,
-                    onRecall = onRecallHistory,
-                    onClear = onClearHistory,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(2.2f)
+            // 显示区
+            if (uiState.mode == CalculatorMode.PROGRAMMER) {
+                ProgrammerDisplay(
+                    value = uiState.programmerValue,
+                    base = uiState.numberBase,
+                    bitWidth = uiState.bitWidth,
+                    modifier = Modifier.fillMaxWidth().weight(0.8f)
+                )
+            } else {
+                CalcoreDisplay(
+                    expression = uiState.state.displayExpression,
+                    result = uiState.state.displayResult,
+                    modifier = Modifier.fillMaxWidth().weight(0.8f)
                 )
             }
-            SidePanelTab.MEMORY -> {
-                MemoryPanel(
-                    memory = uiState.memory,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(2.2f)
-                )
-            }
-            SidePanelTab.VISUALIZATION -> {
-                // 可视化 Tab 已移除，回退到按键
-                onTabChange(SidePanelTab.NONE)
-                val keypadModifier = Modifier
-                    .fillMaxWidth()
-                    .weight(2.2f)
-                when (uiState.mode) {
-                    CalculatorMode.SCIENTIFIC -> ScientificKeypad(
-                        onInput = onInput,
-                        hasMemory = uiState.memory.hasValue,
-                        modifier = keypadModifier
-                    )
-                    CalculatorMode.PROGRAMMER -> ProgrammerKeypad(
-                        currentBase = uiState.numberBase,
-                        currentBitWidth = uiState.bitWidth,
-                        onInput = onInput,
-                        onBaseChange = onBaseChange,
-                        onBitWidthChange = onBitWidthChange,
-                        hasMemory = uiState.memory.hasValue,
-                        modifier = keypadModifier
-                    )
-                    else -> StandardKeypad(
-                        onInput = onInput,
-                        hasMemory = uiState.memory.hasValue,
-                        modifier = keypadModifier
+
+            // 内容区：按键 / 历史 / 内存
+            when (uiState.activeTab) {
+                SidePanelTab.HISTORY -> {
+                    HistoryPanel(
+                        history = uiState.history,
+                        onRecall = onRecallHistory,
+                        onClear = onClearHistory,
+                        modifier = Modifier.fillMaxWidth().weight(2.2f)
                     )
                 }
-            }
-            else -> {
-                // 按键区
-                val keypadModifier = Modifier
-                    .fillMaxWidth()
-                    .weight(2.2f)
-                when (uiState.mode) {
-                    CalculatorMode.SCIENTIFIC -> ScientificKeypad(
-                        onInput = onInput,
-                        hasMemory = uiState.memory.hasValue,
-                        modifier = keypadModifier
+                SidePanelTab.MEMORY -> {
+                    MemoryPanel(
+                        memory = uiState.memory,
+                        modifier = Modifier.fillMaxWidth().weight(2.2f)
                     )
-                    CalculatorMode.PROGRAMMER -> ProgrammerKeypad(
-                        currentBase = uiState.numberBase,
-                        currentBitWidth = uiState.bitWidth,
-                        onInput = onInput,
-                        onBaseChange = onBaseChange,
-                        onBitWidthChange = onBitWidthChange,
-                        hasMemory = uiState.memory.hasValue,
-                        modifier = keypadModifier
-                    )
-                    else -> StandardKeypad(
-                        onInput = onInput,
-                        hasMemory = uiState.memory.hasValue,
-                        modifier = keypadModifier
-                    )
+                }
+                SidePanelTab.VISUALIZATION -> {
+                    onTabChange(SidePanelTab.NONE)
+                    KeypadArea(uiState, onInput, onBaseChange, onBitWidthChange, Modifier.weight(2.2f))
+                }
+                else -> {
+                    KeypadArea(uiState, onInput, onBaseChange, onBitWidthChange, Modifier.weight(2.2f))
                 }
             }
         }
@@ -315,6 +290,41 @@ private fun PortraitLayout(
             activeLevels = visState.activeLevels,
             playbackSpeed = visState.playbackSpeed,
             onToggleLevel = onToggleLevel
+        )
+    }
+}
+
+// ==================== 键盘区域辅助组件 ====================
+
+@Composable
+private fun KeypadArea(
+    uiState: CalculatorUiState,
+    onInput: (CalculatorInput) -> Unit,
+    onBaseChange: (NumberBase) -> Unit,
+    onBitWidthChange: (com.cloveriris.calcore.domain.model.BitWidth) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val keypadModifier = modifier.fillMaxWidth()
+    when (uiState.mode) {
+        CalculatorMode.SCIENTIFIC -> ScientificKeypad(
+            onInput = onInput,
+            hasMemory = uiState.memory.hasValue,
+            modifier = keypadModifier
+        )
+        CalculatorMode.PROGRAMMER -> ProgrammerKeypad(
+            currentBase = uiState.numberBase,
+            currentBitWidth = uiState.bitWidth,
+            onInput = onInput,
+            onBaseChange = onBaseChange,
+            onBitWidthChange = onBitWidthChange,
+            hasMemory = uiState.memory.hasValue,
+            modifier = keypadModifier
+        )
+        CalculatorMode.DATE -> DateCalculatorPanel(modifier = keypadModifier)
+        else -> StandardKeypad(
+            onInput = onInput,
+            hasMemory = uiState.memory.hasValue,
+            modifier = keypadModifier
         )
     }
 }
@@ -339,14 +349,17 @@ private fun LandscapeLayout(
     onToggleLevel: (com.cloveriris.calcore.domain.model.VisualizationLevel) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val isEvaluating = uiState.state is CalculatorState.Evaluated && visState.isPlaying
     var isRightExpanded by remember { mutableStateOf(false) }
+    // 计算时自动展开右侧可视化
+    val targetRightExpanded = isRightExpanded || isEvaluating
     val leftWeight by animateFloatAsState(
-        targetValue = if (isRightExpanded) 0.40f else 0.55f,
+        targetValue = if (targetRightExpanded) 0.35f else 0.55f,
         animationSpec = tween(durationMillis = 300),
         label = "leftWeight"
     )
     val rightWeight by animateFloatAsState(
-        targetValue = if (isRightExpanded) 0.60f else 0.45f,
+        targetValue = if (targetRightExpanded) 0.65f else 0.45f,
         animationSpec = tween(durationMillis = 300),
         label = "rightWeight"
     )
@@ -372,65 +385,50 @@ private fun LandscapeLayout(
                         value = uiState.programmerValue,
                         base = uiState.numberBase,
                         bitWidth = uiState.bitWidth,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(0.5f)
+                        modifier = if (isEvaluating) {
+                            Modifier.fillMaxWidth().weight(1f)
+                        } else {
+                            Modifier.fillMaxWidth().weight(0.5f)
+                        }
                     )
                 } else {
                     CalcoreDisplay(
                         expression = uiState.state.displayExpression,
                         result = uiState.state.displayResult,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(0.5f)
+                        modifier = if (isEvaluating) {
+                            Modifier.fillMaxWidth().weight(1f)
+                        } else {
+                            Modifier.fillMaxWidth().weight(0.5f)
+                        }
                     )
                 }
 
                 // 横屏时左侧也显示历史/内存小面板（可切换）
-                when (uiState.activeTab) {
-                    SidePanelTab.HISTORY -> {
-                        HistoryPanel(
-                            history = uiState.history,
-                            onRecall = onRecallHistory,
-                            onClear = onClearHistory,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(0.4f)
-                        )
+                if (!isEvaluating) {
+                    when (uiState.activeTab) {
+                        SidePanelTab.HISTORY -> {
+                            HistoryPanel(
+                                history = uiState.history,
+                                onRecall = onRecallHistory,
+                                onClear = onClearHistory,
+                                modifier = Modifier.fillMaxWidth().weight(0.4f)
+                            )
+                        }
+                        SidePanelTab.MEMORY -> {
+                            MemoryPanel(
+                                memory = uiState.memory,
+                                modifier = Modifier.fillMaxWidth().weight(0.4f)
+                            )
+                        }
+                        else -> { /* 占位，不占空间 */ }
                     }
-                    SidePanelTab.MEMORY -> {
-                        MemoryPanel(
-                            memory = uiState.memory,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(0.4f)
-                        )
-                    }
-                    else -> { /* 占位，不占空间 */ }
-                }
 
-                val keypadModifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1.1f)
-                when (uiState.mode) {
-                    CalculatorMode.SCIENTIFIC -> ScientificKeypad(
-                        onInput = onInput,
-                        hasMemory = uiState.memory.hasValue,
-                        modifier = keypadModifier
-                    )
-                    CalculatorMode.PROGRAMMER -> ProgrammerKeypad(
-                        currentBase = uiState.numberBase,
-                        currentBitWidth = uiState.bitWidth,
+                    KeypadArea(
+                        uiState = uiState,
                         onInput = onInput,
                         onBaseChange = onBaseChange,
                         onBitWidthChange = onBitWidthChange,
-                        hasMemory = uiState.memory.hasValue,
-                        modifier = keypadModifier
-                    )
-                    else -> StandardKeypad(
-                        onInput = onInput,
-                        hasMemory = uiState.memory.hasValue,
-                        modifier = keypadModifier
+                        modifier = Modifier.weight(1.1f)
                     )
                 }
             }

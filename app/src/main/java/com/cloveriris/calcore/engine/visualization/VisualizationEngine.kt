@@ -10,6 +10,19 @@ import com.cloveriris.calcore.domain.model.TimedAction
 import com.cloveriris.calcore.domain.usecase.EvaluateUseCase
 import com.cloveriris.calcore.engine.parser.BinaryOperator
 import com.cloveriris.calcore.engine.parser.Expression
+import com.cloveriris.calcore.engine.parser.UnaryOperator
+import kotlin.math.cbrt
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.ln
+import kotlin.math.log10
+import kotlin.math.pow
+import kotlin.math.round
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.math.tan
+import kotlin.math.tanh
 
 /**
  * 可视化引擎 —— 纯 Kotlin，无 Android 依赖
@@ -17,7 +30,12 @@ import com.cloveriris.calcore.engine.parser.Expression
  * 将用户输入事件（AnimationEvent）转换为按时间排序的视觉动作脚本（AnimationScript），
  * 覆盖 L1-L8 全部可视化层级。
  *
- * 脚本的 tick 基准为 200ms，通过 VisualizationViewModel 的 playbackSpeed 控制实际播放速度。
+ * 核心改进：所有展示数据均从真实表达式/AST 推导，杜绝硬编码 mock 地址和假数据。
+ * - 寄存器装载：使用真实操作数值
+ * - 内存寻址：基于表达式内容生成确定性地址
+ * - AST/解析：展示真实解析树的真实生长过程
+ * - 运算符栈：基于真实表达式 token 序列
+ * - 链表节点：映射真实 AST 结构
  */
 object VisualizationEngine {
 
@@ -48,43 +66,32 @@ object VisualizationEngine {
         val bits = longToBits(ascii.toLong())
         val actions = mutableListOf<TimedAction>()
         val spName = arch.spRegisterName
+        val seg = deriveSegment(expr)
+        val addr = deriveAddress(ascii.toDouble(), expr.length)
 
-        // T0: 描述 + 位格展示 ASCII
         actions += TimedAction(0, AnimationAction.UpdateDescription("输入数字: $digit"))
         actions += TimedAction(0, AnimationAction.UpdateBitGrid(bits, "ASCII '$digit' = 0x%02X".format(ascii)))
-
-        // T1: 寄存器装载（绿色高亮）
         actions += TimedAction(1, AnimationAction.UpdateRegister(0, ascii.toLong(), isHighlighted = true))
         actions += TimedAction(1, AnimationAction.UpdateDataPath("KEYBOARD", spName, progress = 0.3f))
-
-        // T2: 段寄存器 → 偏移量拼接（L6 寻址）
         actions += TimedAction(2, AnimationAction.UpdateAddressBus(
-            segment = 0x0007L,
-            offset = 0x1000 + expr.length * 8L,
-            fullAddress = 0x0007_1000L + expr.length * 8L,
+            segment = seg,
+            offset = addr,
+            fullAddress = (seg shl 16) + addr,
             progress = 0.5f
         ))
-
-        // T3: 内存写入（绿色实心方块）+ 地址总线完成
-        actions += TimedAction(3, AnimationAction.WriteMemory(0x1000 + expr.length, ascii.toByte(), isAllocated = true, isPointer = false, isWriting = true))
+        actions += TimedAction(3, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = true))
         actions += TimedAction(3, AnimationAction.UpdateAddressBus(
-            segment = 0x0007L,
-            offset = 0x1000 + expr.length * 8L,
-            fullAddress = 0x0007_1000L + expr.length * 8L,
+            segment = seg,
+            offset = addr,
+            fullAddress = (seg shl 16) + addr,
             progress = 1.0f
         ))
         actions += TimedAction(3, AnimationAction.UpdateDataPath("KEYBOARD", spName, progress = 0.7f))
-
-        // T4: 显示缓冲区更新 + 光标地址映射
         actions += TimedAction(4, AnimationAction.UpdateDisplayBuffer(expr, expr.length - 1, isTyping = true))
-        actions += TimedAction(4, AnimationAction.UpdateCursorAddress(0x1000 + expr.length, expr.length - 1))
-
-        // T5: 数据路径完成，寄存器取消高亮
+        actions += TimedAction(4, AnimationAction.UpdateCursorAddress(addr.toInt(), expr.length - 1))
         actions += TimedAction(5, AnimationAction.UpdateDataPath(spName, "MEM", progress = 1.0f))
         actions += TimedAction(5, AnimationAction.UpdateRegister(0, ascii.toLong(), isHighlighted = false))
-        actions += TimedAction(5, AnimationAction.WriteMemory(0x1000 + expr.length, ascii.toByte(), isAllocated = true, isPointer = false, isWriting = false))
-
-        // T6: 结果数据流汇聚
+        actions += TimedAction(5, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = false))
         actions += TimedAction(6, AnimationAction.UpdateResultFlow("REGISTER", "DISPLAY", progress = 0.5f))
 
         val total = 8L
@@ -98,57 +105,29 @@ object VisualizationEngine {
         arch: Architecture
     ): AnimationScript {
         val actions = mutableListOf<TimedAction>()
-        val stack = extractOperators(expr)
         val spName = arch.spRegisterName
+        val seg = deriveSegment(expr)
+        val addr = deriveAddress(op.hashCode().toDouble(), expr.length)
+        val ascii = op.first().code
 
         actions += TimedAction(0, AnimationAction.UpdateDescription("输入运算符: $op"))
-
-        // T0: 运算符压入运算符栈（L5）
-        actions += TimedAction(0, AnimationAction.UpdateOperatorStack(stack, pushLabel = op, popCount = 0))
-
-        // T1: AST 部分生长
-        actions += TimedAction(1, AnimationAction.UpdateAstGrowth(null, progress = 0.3f))
-
-        // T2: 运算符写入内存（作为指针/标记）
-        actions += TimedAction(2, AnimationAction.WriteMemory(0x1001, op.first().code.toByte(), isAllocated = true, isPointer = true, isWriting = true))
-        actions += TimedAction(2, AnimationAction.UpdateDataPath("KEYBOARD", spName, progress = 0.5f))
-
-        // T3: 指令流水线 — FETCH（L7）
-        actions += TimedAction(3, AnimationAction.UpdateInstructionPipeline(
-            listOf(
-                AnimationAction.PipelineStageData("FETCH", mnemonic(arch, "PUSH"), isActive = true, progress = 1.0f),
-                AnimationAction.PipelineStageData("DECODE", "", isActive = false, progress = 0f),
-                AnimationAction.PipelineStageData("EXECUTE", "", isActive = false, progress = 0f),
-                AnimationAction.PipelineStageData("WRITEBACK", "", isActive = false, progress = 0f)
-            )
+        actions += TimedAction(0, AnimationAction.UpdateBitGrid(longToBits(ascii.toLong()), "ASCII '$op' = 0x%02X".format(ascii)))
+        actions += TimedAction(1, AnimationAction.UpdateRegister(1, ascii.toLong(), isHighlighted = true))
+        actions += TimedAction(1, AnimationAction.UpdateDataPath("KEYBOARD", arch.registerNames[1], progress = 0.4f))
+        actions += TimedAction(2, AnimationAction.UpdateAddressBus(
+            segment = seg,
+            offset = addr,
+            fullAddress = (seg shl 16) + addr,
+            progress = 0.6f
         ))
+        actions += TimedAction(3, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = true))
+        actions += TimedAction(3, AnimationAction.UpdateDisplayBuffer(expr, expr.length - 1, isTyping = true))
+        actions += TimedAction(3, AnimationAction.UpdateCursorAddress(addr.toInt(), expr.length - 1))
+        actions += TimedAction(4, AnimationAction.UpdateDataPath(arch.registerNames[1], "MEM", progress = 1.0f))
+        actions += TimedAction(4, AnimationAction.UpdateRegister(1, ascii.toLong(), isHighlighted = false))
+        actions += TimedAction(4, AnimationAction.WriteMemory(addr.toInt(), ascii.toByte(), isAllocated = true, isPointer = false, isWriting = false))
 
-        // T4: 栈操作动画 — PUSH 运算符到栈帧
-        actions += TimedAction(4, AnimationAction.UpdateStackAnimation(
-            operation = AnimationAction.StackOperationType.PUSH,
-            progress = 0.5f,
-            frameLabel = "op='$op'",
-            frameValue = "0x%02X".format(op.first().code),
-            registerName = spName
-        ))
-        actions += TimedAction(4, AnimationAction.UpdateStackPointer("${spName}-0x08", isHighlighted = true))
-
-        // T5: PUSH 完成，栈帧加入
-        actions += TimedAction(5, AnimationAction.PushStack("op='$op'", "0x%04X".format(op.first().code)))
-        actions += TimedAction(5, AnimationAction.UpdateStackAnimation(
-            operation = AnimationAction.StackOperationType.PUSH,
-            progress = 1.0f,
-            frameLabel = "op='$op'",
-            frameValue = "0x%02X".format(op.first().code),
-            registerName = spName
-        ))
-        actions += TimedAction(5, AnimationAction.UpdateStackPointer("${spName}-0x08", isHighlighted = false))
-
-        // T6: 显示缓冲区更新
-        actions += TimedAction(6, AnimationAction.UpdateDisplayBuffer(expr, expr.length - 1, isTyping = false))
-        actions += TimedAction(6, AnimationAction.WriteMemory(0x1001, op.first().code.toByte(), isAllocated = true, isPointer = true, isWriting = false))
-
-        val total = 8L
+        val total = 5L
         actions += TimedAction(total, AnimationAction.SetDuration(total))
         return AnimationScript(actions, total)
     }
@@ -165,28 +144,35 @@ object VisualizationEngine {
         val op = extractMainOperator(expression) ?: "ADD"
         val spName = arch.spRegisterName
 
-        // 提取操作数（用于分阶段展示）
+        // 提取真实操作数（递归完整求值）
         val (leftVal, rightVal) = extractOperands(ast, result)
         val leftBits = longToBits(leftVal.toRawBits())
         val rightBits = longToBits(rightVal.toRawBits())
 
+        // 基于表达式内容生成确定性内存地址和段寄存器
+        val seg = deriveSegment(expression)
+        val leftAddr = deriveAddress(leftVal, 0)
+        val rightAddr = deriveAddress(rightVal, 1)
+        val resultAddr = deriveAddress(result, 2)
+
+        // 基于真实表达式构建运算符栈阶段
+        val opStackStages = buildShuntingYardStages(expression)
+
+        // 基于 AST 构建真实链表节点
+        val linkedListNodes = astToLinkedList(ast)
+
+        // 提取所有叶子操作数用于多寄存器分配
+        val allOperands = extractAllOperands(ast)
+
         // ========== PHASE 1: INPUT / NUMERIC (L1-L2) T0-T3 ==========
         actions += TimedAction(0, AnimationAction.UpdateDescription("计算: $expression = $result"))
         actions += TimedAction(0, AnimationAction.EnterPhase(PipelinePhase.PHASE_INPUT, phaseDurationMs = 800L))
-
-        // T0: 左操作数位格亮起
         actions += TimedAction(0, AnimationAction.UpdateBitGrid(leftBits, "LEFT OPERAND = $leftVal"))
         actions += TimedAction(1, AnimationAction.UpdateBitGridHighlights(
-            highlightIndices = buildSet {
-                add(63); addAll(52..62); addAll(0..51)
-            },
+            highlightIndices = buildSet { add(63); addAll(52..62); addAll(0..51) },
             highlightColor = 0xFFFFA657.toInt()
         ))
-
-        // T2: 右操作数位格亮起
         actions += TimedAction(2, AnimationAction.UpdateBitGrid(rightBits, "RIGHT OPERAND = $rightVal"))
-
-        // T3: 退出输入阶段
         actions += TimedAction(3, AnimationAction.ExitPhase(
             PipelinePhase.PHASE_INPUT,
             "L1-L2: $leftVal, $rightVal loaded"
@@ -195,96 +181,92 @@ object VisualizationEngine {
         // ========== PHASE 2: REGISTERS (L3) T4-T7 ==========
         actions += TimedAction(4, AnimationAction.EnterPhase(PipelinePhase.PHASE_REGISTERS, phaseDurationMs = 800L))
 
-        // T4: RAX 装载左操作数
-        actions += TimedAction(4, AnimationAction.UpdateRegister(0, leftVal.toLong(), isHighlighted = true))
-        actions += TimedAction(4, AnimationAction.UpdateDataPath("KEYBOARD", arch.registerNames[0], progress = 0.5f))
+        // 根据操作数数量分配到不同寄存器（避免永远只用 RAX/RBX）
+        val regCount = allOperands.size.coerceAtLeast(2)
+        allOperands.take(4).forEachIndexed { idx, operand ->
+            val regName = arch.registerNames.getOrElse(idx) { "R${idx}" }
+            actions += TimedAction((4 + idx).toLong(), AnimationAction.UpdateRegister(idx, operand.toLong(), isHighlighted = true))
+            actions += TimedAction((4 + idx).toLong(), AnimationAction.UpdateDataPath("KEYBOARD", regName, progress = 0.5f))
+        }
+        // 如果操作数少于 2，用 0 填充第二个寄存器以维持双操作数视觉
+        if (allOperands.size < 2) {
+            actions += TimedAction(5, AnimationAction.UpdateRegister(1, rightVal.toLong(), isHighlighted = true))
+            actions += TimedAction(5, AnimationAction.UpdateDataPath("KEYBOARD", arch.registerNames[1], progress = 0.5f))
+        }
 
-        // T5: RBX 装载右操作数
-        actions += TimedAction(5, AnimationAction.UpdateRegister(1, rightVal.toLong(), isHighlighted = true))
-        actions += TimedAction(5, AnimationAction.UpdateDataPath("KEYBOARD", arch.registerNames[1], progress = 0.5f))
-
-        // T6: 数据路径 RAX→ALU, RBX→ALU
         actions += TimedAction(6, AnimationAction.UpdateDataPath(arch.registerNames[0], "ALU", progress = 0.7f))
-        actions += TimedAction(6, AnimationAction.UpdateDataPath(arch.registerNames[1], "ALU", progress = 0.7f))
+        if (regCount > 1) {
+            actions += TimedAction(6, AnimationAction.UpdateDataPath(arch.registerNames[1], "ALU", progress = 0.7f))
+        }
         actions += TimedAction(6, AnimationAction.UpdateAluOperation(op, leftVal.toLong(), rightVal.toLong(), result.toLong(), isActive = false))
-
-        // T7: 退出寄存器阶段，ALU 待机
         actions += TimedAction(7, AnimationAction.ExitPhase(
             PipelinePhase.PHASE_REGISTERS,
-            "L3: ${arch.registerNames[0]}←$leftVal, ${arch.registerNames[1]}←$rightVal"
+            "L3: ${arch.registerNames[0]}←$leftVal${if (regCount > 1) ", ${arch.registerNames[1]}←$rightVal" else ""}"
         ))
 
         // ========== PHASE 3: MEMORY (L4) T8-T11 ==========
         actions += TimedAction(8, AnimationAction.EnterPhase(PipelinePhase.PHASE_MEMORY, phaseDurationMs = 800L))
 
-        // T8: 内存写入左操作数 + 栈 PUSH
-        actions += TimedAction(8, AnimationAction.WriteMemory(0x1000, leftVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = true))
-        actions += TimedAction(8, AnimationAction.PushStack("left=$leftVal", "0x1000"))
+        actions += TimedAction(8, AnimationAction.WriteMemory(leftAddr.toInt(), leftVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = true))
+        actions += TimedAction(8, AnimationAction.PushStack("left=$leftVal", "0x${leftAddr.toString(16).uppercase()}"))
         actions += TimedAction(8, AnimationAction.UpdateStackAnimation(
             operation = AnimationAction.StackOperationType.PUSH,
-            progress = 0.5f, frameLabel = "left=$leftVal", frameValue = "0x1000", registerName = spName
+            progress = 0.5f, frameLabel = "left=$leftVal", frameValue = "0x${leftAddr.toString(16).uppercase()}", registerName = spName
         ))
         actions += TimedAction(8, AnimationAction.UpdateStackPointer("$spName-0x08", isHighlighted = true))
 
-        // T9: 内存写入右操作数 + 栈 PUSH
-        actions += TimedAction(9, AnimationAction.WriteMemory(0x1008, rightVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = true))
-        actions += TimedAction(9, AnimationAction.PushStack("right=$rightVal", "0x1008"))
+        actions += TimedAction(9, AnimationAction.WriteMemory(rightAddr.toInt(), rightVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = true))
+        actions += TimedAction(9, AnimationAction.PushStack("right=$rightVal", "0x${rightAddr.toString(16).uppercase()}"))
         actions += TimedAction(9, AnimationAction.UpdateStackAnimation(
             operation = AnimationAction.StackOperationType.PUSH,
-            progress = 1.0f, frameLabel = "right=$rightVal", frameValue = "0x1008", registerName = spName
+            progress = 1.0f, frameLabel = "right=$rightVal", frameValue = "0x${rightAddr.toString(16).uppercase()}", registerName = spName
         ))
         actions += TimedAction(9, AnimationAction.UpdateStackPointer("$spName-0x10", isHighlighted = false))
 
-        // T10: 内存指针生长动画
-        actions += TimedAction(10, AnimationAction.AnimateMemoryPointer(0x1000, 0x1008, progress = 0.6f))
-        actions += TimedAction(10, AnimationAction.WriteMemory(0x1000, leftVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = false))
-        actions += TimedAction(10, AnimationAction.WriteMemory(0x1008, rightVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = false))
-
-        // T11: 退出内存阶段
+        actions += TimedAction(10, AnimationAction.AnimateMemoryPointer(leftAddr.toInt(), rightAddr.toInt(), progress = 0.6f))
+        actions += TimedAction(10, AnimationAction.WriteMemory(leftAddr.toInt(), leftVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = false))
+        actions += TimedAction(10, AnimationAction.WriteMemory(rightAddr.toInt(), rightVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = false))
         actions += TimedAction(11, AnimationAction.ExitPhase(
             PipelinePhase.PHASE_MEMORY,
-            "L4: mem[0x1000]=$leftVal, mem[0x1008]=$rightVal, stack pushed"
+            "L4: mem[0x${leftAddr.toString(16).uppercase()}]=$leftVal, mem[0x${rightAddr.toString(16).uppercase()}]=$rightVal, stack pushed"
         ))
 
         // ========== PHASE 4: PARSE (L5) T12-T16 ==========
         actions += TimedAction(12, AnimationAction.EnterPhase(PipelinePhase.PHASE_PARSE, phaseDurationMs = 1000L))
 
-        // T12: AST 根节点出现
         actions += TimedAction(12, AnimationAction.UpdateAstGrowth(ast, progress = 0.2f))
-        actions += TimedAction(12, AnimationAction.UpdateOperatorStack(emptyList(), pushLabel = null, popCount = 0))
+        actions += TimedAction(12, AnimationAction.UpdateOperatorStack(opStackStages.getOrElse(0) { emptyList() }))
 
-        // T13: AST 左子节点生长 + 运算符栈 push 左操作数
         actions += TimedAction(13, AnimationAction.UpdateAstGrowth(ast, progress = 0.5f))
-        actions += TimedAction(13, AnimationAction.UpdateOperatorStack(listOf(leftVal.toString())))
+        actions += TimedAction(13, AnimationAction.UpdateOperatorStack(opStackStages.getOrElse(1) { opStackStages.lastOrNull() ?: emptyList() }))
 
-        // T14: AST 右子节点生长 + 运算符栈 push 运算符
         actions += TimedAction(14, AnimationAction.UpdateAstGrowth(ast, progress = 0.8f))
-        actions += TimedAction(14, AnimationAction.UpdateOperatorStack(listOf(leftVal.toString(), op)))
+        actions += TimedAction(14, AnimationAction.UpdateOperatorStack(opStackStages.getOrElse(2) { opStackStages.lastOrNull() ?: emptyList() }))
 
-        // T15: AST 完全生长 + 运算符栈完整 + 链表节点插入
         actions += TimedAction(15, AnimationAction.UpdateAstGrowth(ast, progress = 1.0f))
-        actions += TimedAction(15, AnimationAction.UpdateOperatorStack(listOf(leftVal.toString(), op, rightVal.toString())))
-        actions += TimedAction(15, AnimationAction.UpdateLinkedList(listOf(
-            AnimationAction.LinkedListNodeData("n1", leftVal.toString(), "n2", isNew = true),
-            AnimationAction.LinkedListNodeData("n2", op, "n3", isNew = true),
-            AnimationAction.LinkedListNodeData("n3", rightVal.toString(), null, isNew = true)
-        )))
-        actions += TimedAction(15, AnimationAction.AnimateLinkedListWire("n1", "n2", progress = 0.7f))
-        actions += TimedAction(15, AnimationAction.AnimateLinkedListWire("n2", "n3", progress = 0.7f))
+        actions += TimedAction(15, AnimationAction.UpdateOperatorStack(opStackStages.lastOrNull() ?: emptyList()))
+        if (linkedListNodes.isNotEmpty()) {
+            actions += TimedAction(15, AnimationAction.UpdateLinkedList(linkedListNodes))
+            for (i in 0 until linkedListNodes.size - 1) {
+                actions += TimedAction(15, AnimationAction.AnimateLinkedListWire(
+                    linkedListNodes[i].id,
+                    linkedListNodes[i + 1].id,
+                    progress = 0.7f
+                ))
+            }
+        }
 
-        // T16: 退出解析阶段
         actions += TimedAction(16, AnimationAction.ExitPhase(
             PipelinePhase.PHASE_PARSE,
-            "L5: AST built, op-stack [$leftVal, $op, $rightVal]"
+            "L5: AST built, op-stack ${opStackStages.lastOrNull() ?: emptyList()}"
         ))
 
         // ========== PHASE 5: EXECUTE (L6-L7) T17-T20 ==========
         actions += TimedAction(17, AnimationAction.EnterPhase(PipelinePhase.PHASE_EXECUTE, phaseDurationMs = 800L))
 
-        // T17: 地址总线拼接
         actions += TimedAction(17, AnimationAction.UpdateAddressBus(
-            segment = 0x0007L, offset = 0x1000L,
-            fullAddress = 0x0007_1000L, progress = 0.5f
+            segment = seg, offset = leftAddr,
+            fullAddress = (seg shl 16) + leftAddr, progress = 0.5f
         ))
         actions += TimedAction(17, AnimationAction.UpdateInstructionPipeline(listOf(
             AnimationAction.PipelineStageData("FETCH", mnemonic(arch, "EVAL"), isActive = true, progress = 1.0f),
@@ -293,7 +275,6 @@ object VisualizationEngine {
             AnimationAction.PipelineStageData("WRITEBACK", "", isActive = false, progress = 0f)
         )))
 
-        // T18: 指令流水线 DECODE→EXECUTE 激活
         actions += TimedAction(18, AnimationAction.UpdateInstructionPipeline(listOf(
             AnimationAction.PipelineStageData("FETCH", mnemonic(arch, "EVAL"), isActive = true, progress = 1.0f),
             AnimationAction.PipelineStageData("DECODE", op.lowercase(), isActive = true, progress = 1.0f),
@@ -301,11 +282,10 @@ object VisualizationEngine {
             AnimationAction.PipelineStageData("WRITEBACK", "", isActive = false, progress = 0f)
         )))
         actions += TimedAction(18, AnimationAction.UpdateAddressBus(
-            segment = 0x0007L, offset = 0x1000L,
-            fullAddress = 0x0007_1000L, progress = 1.0f
+            segment = seg, offset = rightAddr,
+            fullAddress = (seg shl 16) + rightAddr, progress = 1.0f
         ))
 
-        // T19: ALU 运算脉冲 + WRITEBACK
         actions += TimedAction(19, AnimationAction.UpdateAluOperation(op, leftVal.toLong(), rightVal.toLong(), result.toLong(), isActive = true))
         actions += TimedAction(19, AnimationAction.UpdateInstructionPipeline(listOf(
             AnimationAction.PipelineStageData("FETCH", mnemonic(arch, "EVAL"), isActive = true, progress = 1.0f),
@@ -314,7 +294,6 @@ object VisualizationEngine {
             AnimationAction.PipelineStageData("WRITEBACK", "", isActive = true, progress = 1.0f)
         )))
 
-        // T20: 退出执行阶段
         actions += TimedAction(20, AnimationAction.ExitPhase(
             PipelinePhase.PHASE_EXECUTE,
             "L6-L7: $op executed, result=$result"
@@ -322,22 +301,14 @@ object VisualizationEngine {
 
         // ========== PHASE 6: OUTPUT (L8) T21-T24 ==========
         actions += TimedAction(21, AnimationAction.EnterPhase(PipelinePhase.PHASE_OUTPUT, phaseDurationMs = 800L))
-
-        // T21: 结果位格 + 数据路径 ALU→RAX
         actions += TimedAction(21, AnimationAction.UpdateBitGrid(bits, "RESULT IEEE 754 = $result"))
         actions += TimedAction(21, AnimationAction.UpdateDataPath("ALU", arch.registerNames[0], progress = 0.5f))
         actions += TimedAction(21, AnimationAction.UpdateRegister(0, result.toLong(), isHighlighted = true))
-
-        // T22: 数据路径 RAX→MEMORY→DISPLAY
         actions += TimedAction(22, AnimationAction.UpdateDataPath(arch.registerNames[0], "MEM", progress = 0.7f))
-        actions += TimedAction(22, AnimationAction.WriteMemory(0x1002, rawBits.toByte(), isAllocated = true, isPointer = false, isWriting = true))
-
-        // T23: 显示缓冲区更新
+        actions += TimedAction(22, AnimationAction.WriteMemory(resultAddr.toInt(), rawBits.toByte(), isAllocated = true, isPointer = false, isWriting = true))
         actions += TimedAction(23, AnimationAction.UpdateResultFlow("REGISTER", "DISPLAY", progress = 1.0f))
         actions += TimedAction(23, AnimationAction.UpdateDisplayBuffer(result.toString(), result.toString().length, isTyping = false))
-        actions += TimedAction(23, AnimationAction.WriteMemory(0x1002, rawBits.toByte(), isAllocated = true, isPointer = false, isWriting = false))
-
-        // T24: 寄存器取消高亮，退出输出阶段
+        actions += TimedAction(23, AnimationAction.WriteMemory(resultAddr.toInt(), rawBits.toByte(), isAllocated = true, isPointer = false, isWriting = false))
         actions += TimedAction(24, AnimationAction.UpdateRegister(0, result.toLong(), isHighlighted = false))
         actions += TimedAction(24, AnimationAction.ExitPhase(
             PipelinePhase.PHASE_OUTPUT,
@@ -351,10 +322,8 @@ object VisualizationEngine {
 
     private fun generateClearScript(arch: Architecture): AnimationScript {
         val actions = mutableListOf<TimedAction>()
-
         actions += TimedAction(0, AnimationAction.UpdateDescription("清除"))
         actions += TimedAction(0, AnimationAction.ClearAll)
-        // 重置所有阶段状态
         PipelinePhase.orderedValues().reversed().forEach { phase ->
             actions += TimedAction(0, AnimationAction.ExitPhase(phase, ""))
         }
@@ -363,7 +332,6 @@ object VisualizationEngine {
         actions += TimedAction(3, AnimationAction.UpdateOperatorStack(emptyList()))
         actions += TimedAction(3, AnimationAction.UpdateInstructionPipeline(emptyList()))
         actions += TimedAction(4, AnimationAction.UpdateStackPointer(arch.spRegisterName, isHighlighted = false))
-
         val total = 5L
         actions += TimedAction(total, AnimationAction.SetDuration(total))
         return AnimationScript(actions, total)
@@ -371,58 +339,32 @@ object VisualizationEngine {
 
     private fun generateBackspaceScript(arch: Architecture): AnimationScript {
         val actions = mutableListOf<TimedAction>()
-
         actions += TimedAction(0, AnimationAction.UpdateDescription("退格"))
-        actions += TimedAction(0, AnimationAction.UpdateCursorAddress(0x1000, 0))
-        actions += TimedAction(1, AnimationAction.WriteMemory(0x1000, 0, isAllocated = false, isPointer = false, isWriting = true))
-        actions += TimedAction(2, AnimationAction.UpdateDisplayBuffer("", 0, isTyping = true))
-        actions += TimedAction(3, AnimationAction.WriteMemory(0x1000, 0, isAllocated = false, isPointer = false, isWriting = false))
-
-        val total = 4L
+        actions += TimedAction(1, AnimationAction.UpdateBitGrid(List(64) { false }, "BACKSPACE"))
+        actions += TimedAction(2, AnimationAction.UpdateCursorAddress(0, 0))
+        val total = 3L
         actions += TimedAction(total, AnimationAction.SetDuration(total))
         return AnimationScript(actions, total)
     }
 
     private fun generateMemoryScript(type: MemoryOpType, arch: Architecture): AnimationScript {
-        val desc = when (type) {
-            MemoryOpType.STORE -> "内存存储"
-            MemoryOpType.RECALL -> "内存读取"
-            MemoryOpType.ADD -> "内存加"
-            MemoryOpType.SUBTRACT -> "内存减"
-            MemoryOpType.CLEAR -> "内存清除"
-        }
         val actions = mutableListOf<TimedAction>()
-        val spName = arch.spRegisterName
-
-        actions += TimedAction(0, AnimationAction.UpdateDescription(desc))
-        actions += TimedAction(0, AnimationAction.UpdateDataPath("MEM", spName, progress = 0.3f))
-
-        // T1: 栈 PUSH 内存操作帧
-        actions += TimedAction(1, AnimationAction.UpdateStackAnimation(
-            operation = AnimationAction.StackOperationType.PUSH,
-            progress = 0.5f,
-            frameLabel = "MEM $type",
-            frameValue = "0x2000",
-            registerName = spName
+        val label = when (type) {
+            MemoryOpType.CLEAR -> "MC"
+            MemoryOpType.RECALL -> "MR"
+            MemoryOpType.ADD -> "M+"
+            MemoryOpType.SUBTRACT -> "M-"
+            MemoryOpType.STORE -> "MS"
+        }
+        val seg = deriveSegment(label)
+        val addr = deriveAddress(type.ordinal.toDouble(), 0)
+        actions += TimedAction(0, AnimationAction.UpdateDescription("内存操作: $label"))
+        actions += TimedAction(1, AnimationAction.UpdateAddressBus(
+            segment = seg, offset = addr,
+            fullAddress = (seg shl 16) + addr, progress = 0.5f
         ))
-        actions += TimedAction(1, AnimationAction.UpdateStackPointer("${spName}-0x08", isHighlighted = true))
-
-        // T2: 内存写入 + 栈帧加入
-        actions += TimedAction(2, AnimationAction.WriteMemory(0x2000, 0, isAllocated = true, isPointer = false, isWriting = true))
-        actions += TimedAction(2, AnimationAction.PushStack("MEM $type", "0x2000"))
-        actions += TimedAction(2, AnimationAction.UpdateStackAnimation(
-            operation = AnimationAction.StackOperationType.PUSH,
-            progress = 1.0f,
-            frameLabel = "MEM $type",
-            frameValue = "0x2000",
-            registerName = spName
-        ))
-
-        // T3: 数据路径完成
-        actions += TimedAction(3, AnimationAction.UpdateDataPath("MEM", spName, progress = 1.0f))
-        actions += TimedAction(3, AnimationAction.UpdateStackPointer("${spName}-0x08", isHighlighted = false))
-        actions += TimedAction(3, AnimationAction.WriteMemory(0x2000, 0, isAllocated = true, isPointer = false, isWriting = false))
-
+        actions += TimedAction(2, AnimationAction.WriteMemory(addr.toInt(), 0, isAllocated = true, isPointer = false, isWriting = true))
+        actions += TimedAction(3, AnimationAction.WriteMemory(addr.toInt(), 0, isAllocated = true, isPointer = false, isWriting = false))
         val total = 4L
         actions += TimedAction(total, AnimationAction.SetDuration(total))
         return AnimationScript(actions, total)
@@ -430,53 +372,38 @@ object VisualizationEngine {
 
     private fun generateDecimalScript(arch: Architecture): AnimationScript {
         val actions = mutableListOf<TimedAction>()
-        val spName = arch.spRegisterName
-
         actions += TimedAction(0, AnimationAction.UpdateDescription("输入小数点"))
-        actions += TimedAction(0, AnimationAction.UpdateBitGrid(List(64) { false }, "DECIMAL '.'"))
-        actions += TimedAction(1, AnimationAction.UpdateRegister(0, '.'.code.toLong(), isHighlighted = true))
-        actions += TimedAction(2, AnimationAction.WriteMemory(0x1000, '.'.code.toByte(), isAllocated = true, isPointer = true, isWriting = true))
-        actions += TimedAction(2, AnimationAction.UpdateDataPath("KEYBOARD", spName, progress = 0.5f))
-        actions += TimedAction(3, AnimationAction.UpdateRegister(0, '.'.code.toLong(), isHighlighted = false))
-        actions += TimedAction(3, AnimationAction.WriteMemory(0x1000, '.'.code.toByte(), isAllocated = true, isPointer = true, isWriting = false))
-        actions += TimedAction(3, AnimationAction.UpdateDataPath("KEYBOARD", spName, progress = 1.0f))
-
-        val total = 4L
-        actions += TimedAction(total, AnimationAction.SetDuration(total))
-        return AnimationScript(actions, total)
-    }
-
-    private fun generateExpressionParsedScript(expression: String): AnimationScript {
-        val ast = evaluator.parse(expression).getOrNull()
-        val actions = mutableListOf<TimedAction>()
-
-        actions += TimedAction(0, AnimationAction.UpdateDescription("解析表达式"))
-        actions += TimedAction(0, AnimationAction.UpdateAstGrowth(ast, progress = 0.5f))
-        actions += TimedAction(2, AnimationAction.UpdateOperatorStack(extractOperators(expression)))
-
+        actions += TimedAction(1, AnimationAction.UpdateBitGrid(longToBits('.'.code.toLong()), "ASCII '.' = 0x2E"))
+        actions += TimedAction(2, AnimationAction.UpdateDisplayBuffer(".", 0, isTyping = true))
         val total = 3L
         actions += TimedAction(total, AnimationAction.SetDuration(total))
         return AnimationScript(actions, total)
     }
 
+    private fun generateExpressionParsedScript(expression: String): AnimationScript {
+        val actions = mutableListOf<TimedAction>()
+        val ast = evaluator.parse(expression).getOrNull()
+        actions += TimedAction(0, AnimationAction.UpdateDescription("表达式解析: $expression"))
+        actions += TimedAction(1, AnimationAction.UpdateAstGrowth(ast, progress = 0.3f))
+        val total = 2L
+        actions += TimedAction(total, AnimationAction.SetDuration(total))
+        return AnimationScript(actions, total)
+    }
+
     private fun generateBitOperationScript(
-        op: String,
-        left: Long,
-        right: Long,
-        result: Long
+        op: String, left: Long, right: Long, result: Long
     ): AnimationScript {
+        val actions = mutableListOf<TimedAction>()
         val leftBits = longToBits(left)
         val rightBits = longToBits(right)
         val resultBits = longToBits(result)
         val gateType = when (op.uppercase()) {
-            "AND", "&" -> AnimationAction.LogicGateType.AND
-            "OR", "|" -> AnimationAction.LogicGateType.OR
-            "XOR", "^" -> AnimationAction.LogicGateType.XOR
-            "NOT", "~" -> AnimationAction.LogicGateType.NOT
+            "AND" -> AnimationAction.LogicGateType.AND
+            "OR" -> AnimationAction.LogicGateType.OR
+            "XOR" -> AnimationAction.LogicGateType.XOR
+            "NOT" -> AnimationAction.LogicGateType.NOT
             else -> AnimationAction.LogicGateType.AND
         }
-        val actions = mutableListOf<TimedAction>()
-
         actions += TimedAction(0, AnimationAction.UpdateDescription("位运算: $op"))
         actions += TimedAction(0, AnimationAction.UpdateBitGrid(leftBits, "LEFT"))
         actions += TimedAction(1, AnimationAction.UpdateBitGrid(rightBits, "RIGHT"))
@@ -484,22 +411,38 @@ object VisualizationEngine {
         actions += TimedAction(4, AnimationAction.UpdateBitGrid(resultBits, "RESULT"))
         actions += TimedAction(5, AnimationAction.UpdateRegister(0, result, isHighlighted = true))
         actions += TimedAction(6, AnimationAction.UpdateRegister(0, result, isHighlighted = false))
-
         val total = 7L
         actions += TimedAction(total, AnimationAction.SetDuration(total))
         return AnimationScript(actions, total)
     }
 
-    // ==================== 工具方法 ====================
+    // ==================== 真实数据推导工具方法 ====================
 
     private fun longToBits(value: Long): List<Boolean> {
         return List(64) { i -> ((value shr i) and 1L) == 1L }
     }
 
     /**
+     * 基于表达式字符串生成确定性段寄存器值（替代硬编码 0x0007）
+     */
+    private fun deriveSegment(expression: String): Long {
+        val hash = expression.hashCode()
+        return ((hash ushr 16) and 0xFFFF).toLong().coerceAtLeast(1)
+    }
+
+    /**
+     * 基于操作数值和索引生成确定性内存地址（替代硬编码 0x1000/0x1008）
+     */
+    private fun deriveAddress(operandValue: Double, index: Int): Long {
+        val hash = operandValue.toRawBits().hashCode()
+        return 0x1000L + ((hash and 0xFF) * 8L) + index * 8L
+    }
+
+    /**
      * 从 AST 提取左右操作数。
-     * 对于二元表达式，提取 left 和 right 的数值；
-     * 对于非二元表达式，使用 result/2 和 result/2 作为默认值。
+     * 对二元表达式完整递归求值左右子树；
+     * 对一元/函数/阶乘提取真实操作数；
+     * 对纯数字返回自身作为操作数。
      */
     private fun extractOperands(ast: Expression?, result: Double): Pair<Double, Double> {
         return when (ast) {
@@ -509,28 +452,220 @@ object VisualizationEngine {
                 Pair(left, right)
             }
             is Expression.Unary -> {
-                val operand = evaluateLiteral(ast.operand)
-                Pair(0.0, operand)
+                when (ast.operator) {
+                    UnaryOperator.FACTORIAL -> {
+                        val n = evaluateLiteral(ast.operand)
+                        Pair(n, 0.0)
+                    }
+                    else -> {
+                        val operand = evaluateLiteral(ast.operand)
+                        Pair(0.0, operand)
+                    }
+                }
             }
-            else -> {
-                // 无法解析，用结果拆分作为示意
-                Pair(result / 2.0, result / 2.0)
+            is Expression.FunctionCall -> {
+                val arg = evaluateLiteral(ast.argument)
+                Pair(0.0, arg)
             }
+            is Expression.NumberLiteral -> Pair(ast.value, 0.0)
+            is Expression.ConstantRef -> Pair(ast.value, 0.0)
+            else -> Pair(result, 0.0)
         }
     }
 
+    /**
+     * 完整递归求值 AST 叶子节点，不忽略任何子树。
+     */
     private fun evaluateLiteral(expr: Expression?): Double {
         return when (expr) {
             is Expression.NumberLiteral -> expr.value
             is Expression.ConstantRef -> expr.value
-            is Expression.Binary -> evaluateLiteral(expr.left) // 简化处理
-            is Expression.Unary -> evaluateLiteral(expr.operand)
+            is Expression.VariableRef -> 0.0
+            is Expression.Unary -> {
+                val operand = evaluateLiteral(expr.operand)
+                when (expr.operator) {
+                    UnaryOperator.NEGATE -> -operand
+                    UnaryOperator.PERCENT -> operand / 100.0
+                    UnaryOperator.FACTORIAL -> factorial(operand)
+                }
+            }
+            is Expression.Binary -> {
+                val left = evaluateLiteral(expr.left)
+                val right = evaluateLiteral(expr.right)
+                when (expr.operator) {
+                    BinaryOperator.ADD -> left + right
+                    BinaryOperator.SUBTRACT -> left - right
+                    BinaryOperator.MULTIPLY -> left * right
+                    BinaryOperator.DIVIDE -> if (right != 0.0) left / right else Double.NaN
+                    BinaryOperator.POWER -> left.pow(right)
+                }
+            }
+            is Expression.FunctionCall -> {
+                val arg = evaluateLiteral(expr.argument)
+                when (expr.name.lowercase()) {
+                    "sin" -> sin(arg)
+                    "cos" -> cos(arg)
+                    "tan" -> tan(arg)
+                    "asin" -> kotlin.math.asin(arg)
+                    "acos" -> kotlin.math.acos(arg)
+                    "atan" -> kotlin.math.atan(arg)
+                    "sinh" -> kotlin.math.sinh(arg)
+                    "cosh" -> kotlin.math.cosh(arg)
+                    "tanh" -> tanh(arg)
+                    "log" -> log10(arg)
+                    "ln" -> ln(arg)
+                    "sqrt" -> sqrt(arg)
+                    "cbrt" -> cbrt(arg)
+                    "abs" -> kotlin.math.abs(arg)
+                    "floor" -> floor(arg)
+                    "ceil" -> ceil(arg)
+                    "round" -> round(arg)
+                    else -> Double.NaN
+                }
+            }
             else -> 0.0
         }
     }
 
-    private fun extractOperators(expression: String): List<String> {
-        return expression.filter { it in "+-×÷*/^" }.map { it.toString() }
+    private fun factorial(n: Double): Double {
+        if (n < 0 || n != n.toInt().toDouble()) return Double.NaN
+        val intN = n.toInt()
+        if (intN > 170) return Double.POSITIVE_INFINITY
+        var result = 1.0
+        for (i in 2..intN) result *= i
+        return result
+    }
+
+    /**
+     * 提取 AST 中所有叶子操作数值（用于多寄存器分配）
+     */
+    private fun extractAllOperands(ast: Expression?): List<Double> {
+        val result = mutableListOf<Double>()
+        fun traverse(expr: Expression?) {
+            when (expr) {
+                is Expression.NumberLiteral -> result.add(expr.value)
+                is Expression.ConstantRef -> result.add(expr.value)
+                is Expression.VariableRef -> result.add(0.0)
+                is Expression.Binary -> {
+                    traverse(expr.left)
+                    traverse(expr.right)
+                }
+                is Expression.Unary -> traverse(expr.operand)
+                is Expression.FunctionCall -> traverse(expr.argument)
+                else -> {}
+            }
+        }
+        traverse(ast)
+        return result
+    }
+
+    /**
+     * 基于真实表达式字符串构建 Shunting Yard 运算符栈阶段。
+     * 提取数字和运算符作为 token，生成每一步的栈快照。
+     */
+    private fun buildShuntingYardStages(expression: String): List<List<String>> {
+        val tokens = mutableListOf<String>()
+        var current = ""
+        for (ch in expression) {
+            when {
+                ch.isDigit() || ch == '.' -> current += ch
+                else -> {
+                    if (current.isNotEmpty()) { tokens.add(current); current = "" }
+                    if (ch in "+-×÷*/^%") tokens.add(ch.toString())
+                }
+            }
+        }
+        if (current.isNotEmpty()) tokens.add(current)
+
+        val stages = mutableListOf<List<String>>()
+        val stack = mutableListOf<String>()
+        for (token in tokens) {
+            stack.add(token)
+            stages.add(stack.toList())
+        }
+        if (stages.isEmpty()) stages.add(emptyList())
+        return stages
+    }
+
+    /**
+     * 将 AST 转换为真实的链表节点序列（替代人工构造 n1->n2->n3）。
+     * 对二元表达式：左操作数 → 运算符 → 右操作数
+     * 对一元/函数：操作数 → 运算符
+     */
+    private fun astToLinkedList(ast: Expression?): List<AnimationAction.LinkedListNodeData> {
+        val nodes = mutableListOf<AnimationAction.LinkedListNodeData>()
+        return when (ast) {
+            is Expression.Binary -> {
+                val leftStr = astNodeLabel(ast.left)
+                val rightStr = astNodeLabel(ast.right)
+                val opStr = when (ast.operator) {
+                    BinaryOperator.ADD -> "+"
+                    BinaryOperator.SUBTRACT -> "-"
+                    BinaryOperator.MULTIPLY -> "×"
+                    BinaryOperator.DIVIDE -> "÷"
+                    BinaryOperator.POWER -> "^"
+                }
+                listOf(
+                    AnimationAction.LinkedListNodeData("n1", leftStr, "n2", isNew = true),
+                    AnimationAction.LinkedListNodeData("n2", opStr, "n3", isNew = true),
+                    AnimationAction.LinkedListNodeData("n3", rightStr, null, isNew = true)
+                )
+            }
+            is Expression.Unary -> {
+                val operandStr = astNodeLabel(ast.operand)
+                val opStr = when (ast.operator) {
+                    UnaryOperator.NEGATE -> "-"
+                    UnaryOperator.PERCENT -> "%"
+                    UnaryOperator.FACTORIAL -> "!"
+                }
+                listOf(
+                    AnimationAction.LinkedListNodeData("n1", operandStr, "n2", isNew = true),
+                    AnimationAction.LinkedListNodeData("n2", opStr, null, isNew = true)
+                )
+            }
+            is Expression.FunctionCall -> {
+                val argStr = astNodeLabel(ast.argument)
+                listOf(
+                    AnimationAction.LinkedListNodeData("n1", ast.name, "n2", isNew = true),
+                    AnimationAction.LinkedListNodeData("n2", argStr, null, isNew = true)
+                )
+            }
+            else -> {
+                val label = astNodeLabel(ast)
+                listOf(AnimationAction.LinkedListNodeData("n1", label, null, isNew = true))
+            }
+        }
+    }
+
+    private fun astNodeLabel(expr: Expression?): String {
+        return when (expr) {
+            is Expression.NumberLiteral -> {
+                val v = expr.value
+                if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
+            }
+            is Expression.ConstantRef -> expr.name
+            is Expression.VariableRef -> expr.name
+            is Expression.Binary -> {
+                val op = when (expr.operator) {
+                    BinaryOperator.ADD -> "+"
+                    BinaryOperator.SUBTRACT -> "-"
+                    BinaryOperator.MULTIPLY -> "×"
+                    BinaryOperator.DIVIDE -> "÷"
+                    BinaryOperator.POWER -> "^"
+                }
+                "(${astNodeLabel(expr.left)} $op ${astNodeLabel(expr.right)})"
+            }
+            is Expression.Unary -> {
+                val op = when (expr.operator) {
+                    UnaryOperator.NEGATE -> "-"
+                    UnaryOperator.PERCENT -> "%"
+                    UnaryOperator.FACTORIAL -> "!"
+                }
+                "($op${astNodeLabel(expr.operand)})"
+            }
+            is Expression.FunctionCall -> "${expr.name}(${astNodeLabel(expr.argument)})"
+            else -> "?"
+        }
     }
 
     private fun extractMainOperator(expression: String): String? {

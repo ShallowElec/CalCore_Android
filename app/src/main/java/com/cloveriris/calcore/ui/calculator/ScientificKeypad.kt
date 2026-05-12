@@ -27,14 +27,15 @@ fun ScientificKeypad(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("DEG", "HYP", "F-E", "π", "e").forEach { label ->
-                val input = when (label) {
-                    "π" -> CalculatorInput.Digit("π")
-                    "e" -> CalculatorInput.Digit("e")
-                    else -> CalculatorInput.Digit(label)
+                val (input, enabled) = when (label) {
+                    "π" -> CalculatorInput.Digit("π") to true
+                    "e" -> CalculatorInput.Digit("e") to true
+                    else -> CalculatorInput.Digit(label) to false
                 }
                 CalcoreButton(
                     label = label,
                     onClick = { onInput(input) },
+                    enabled = enabled,
                     modifier = Modifier.weight(1f),
                     type = ButtonType.FUNCTION
                 )
@@ -130,15 +131,18 @@ fun ScientificKeypad(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("√", "10ˣ", "log", "Exp", "Mod").forEach { label ->
-                val input = when (label) {
-                    "√" -> CalculatorInput.SquareRoot
-                    "log" -> CalculatorInput.Operator("log(")
-                    "Mod" -> CalculatorInput.Operator("%")
-                    else -> CalculatorInput.Digit(label)
+                val (input, enabled) = when (label) {
+                    "√" -> CalculatorInput.SquareRoot to true
+                    "10ˣ" -> CalculatorInput.Operator("10^") to true
+                    "log" -> CalculatorInput.Operator("log(") to true
+                    "Exp" -> CalculatorInput.Digit(label) to false
+                    "Mod" -> CalculatorInput.Operator("%") to false
+                    else -> CalculatorInput.Digit(label) to false
                 }
                 CalcoreButton(
                     label = label,
                     onClick = { onInput(input) },
+                    enabled = enabled,
                     modifier = Modifier.weight(1f),
                     type = ButtonType.FUNCTION
                 )
@@ -151,14 +155,16 @@ fun ScientificKeypad(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("¹/x", "eˣ", "ln", "dms", "deg").forEach { label ->
-                val input = when (label) {
-                    "¹/x" -> CalculatorInput.Reciprocal
-                    "ln" -> CalculatorInput.Operator("ln(")
-                    else -> CalculatorInput.Digit(label)
+                val (input, enabled) = when (label) {
+                    "¹/x" -> CalculatorInput.Reciprocal to true
+                    "eˣ" -> CalculatorInput.Operator("e^") to true
+                    "ln" -> CalculatorInput.Operator("ln(") to true
+                    else -> CalculatorInput.Digit(label) to false
                 }
                 CalcoreButton(
                     label = label,
                     onClick = { onInput(input) },
+                    enabled = enabled,
                     modifier = Modifier.weight(1f),
                     type = ButtonType.FUNCTION
                 )

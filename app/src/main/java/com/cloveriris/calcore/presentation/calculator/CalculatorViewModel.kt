@@ -334,29 +334,30 @@ class CalculatorViewModel @Inject constructor(
         _uiState.update { current ->
             when (val state = current.state) {
                 is CalculatorState.Inputting -> {
-                    val result = evaluateUseCase.evaluate(state.displayExpression)
+                    val expr = autoCloseParentheses(state.displayExpression)
+                    val result = evaluateUseCase.evaluate(expr)
                     val resultStr = result.fold(
                         onSuccess = ::formatResult,
                         onFailure = { "Error" }
                     )
                     val numericResult = result.getOrNull() ?: 0.0
                     _animationEvents.tryEmit(
-                        AnimationEvent.ExpressionParsed(state.displayExpression)
+                        AnimationEvent.ExpressionParsed(expr)
                     )
                     _animationEvents.tryEmit(
-                        AnimationEvent.Evaluated(state.displayExpression, numericResult)
+                        AnimationEvent.Evaluated(expr, numericResult)
                     )
                     val newHistory = if (result.isSuccess) {
                         listOf(
                             HistoryEntry(
-                                expression = state.displayExpression,
+                                expression = expr,
                                 result = resultStr
                             )
                         ) + current.history
                     } else current.history
                     current.copy(
                         state = CalculatorState.Evaluated(
-                            displayExpression = state.displayExpression,
+                            displayExpression = expr,
                             displayResult = resultStr
                         ),
                         history = newHistory.take(50)
@@ -365,6 +366,13 @@ class CalculatorViewModel @Inject constructor(
                 else -> current
             }
         }
+    }
+
+    private fun autoCloseParentheses(expr: String): String {
+        val openCount = expr.count { it == '(' }
+        val closeCount = expr.count { it == ')' }
+        val missing = openCount - closeCount
+        return if (missing > 0) expr + ")".repeat(missing) else expr
     }
 
     private fun onClear() {

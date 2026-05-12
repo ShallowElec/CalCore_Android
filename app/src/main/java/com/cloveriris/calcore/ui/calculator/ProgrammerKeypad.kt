@@ -74,6 +74,21 @@ fun ProgrammerKeypad(
             }
         }
 
+        // 算术运算行
+        Row(
+            modifier = Modifier.fillMaxWidth().height(rowHeight),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            listOf("+", "-", "×", "÷", "%").forEach { label ->
+                CalcoreButton(
+                    label = label,
+                    onClick = { onInput(CalculatorInput.Operator(label)) },
+                    modifier = Modifier.weight(1f),
+                    type = ButtonType.OPERATOR
+                )
+            }
+        }
+
         // 功能行
         Row(
             modifier = Modifier.fillMaxWidth().height(rowHeight),
@@ -131,10 +146,9 @@ private fun getDigitRows(base: NumberBase): List<List<String>> {
             listOf("0", "1")
         )
         NumberBase.OCT -> listOf(
-            listOf("7", "8", "9"),
-            listOf("4", "5", "6"),
-            listOf("1", "2", "3"),
-            listOf("0")
+            listOf("7", "6", "5"),
+            listOf("4", "3", "2"),
+            listOf("1", "0")
         )
         NumberBase.DEC -> listOf(
             listOf("7", "8", "9"),
