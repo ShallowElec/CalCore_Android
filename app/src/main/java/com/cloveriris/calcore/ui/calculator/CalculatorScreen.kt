@@ -157,6 +157,7 @@ fun CalculatorScreen(
                     onVisPlayPause = visualizationViewModel::playPauseEvaluation,
                     onVisScrub = visualizationViewModel::setEvaluationProgress,
                     onVisRestart = visualizationViewModel::restartEvaluation,
+                    onToggleLevel = visualizationViewModel::toggleLevel,
                     modifier = Modifier.padding(innerPadding)
                 )
             }
@@ -181,6 +182,7 @@ private fun PortraitLayout(
     onVisPlayPause: () -> Unit = {},
     onVisScrub: (Float) -> Unit = {},
     onVisRestart: () -> Unit = {},
+    onToggleLevel: (com.cloveriris.calcore.domain.model.VisualizationLevel) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -305,7 +307,9 @@ private fun PortraitLayout(
         // 底部控制条
         BottomControlBar(
             architecture = visState.architecture,
-            activeLevels = visState.activeLevels
+            activeLevels = visState.activeLevels,
+            playbackSpeed = visState.playbackSpeed,
+            onToggleLevel = onToggleLevel
         )
     }
 }
@@ -327,6 +331,7 @@ private fun LandscapeLayout(
     onVisPlayPause: () -> Unit = {},
     onVisScrub: (Float) -> Unit = {},
     onVisRestart: () -> Unit = {},
+    onToggleLevel: (com.cloveriris.calcore.domain.model.VisualizationLevel) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var isRightExpanded by remember { mutableStateOf(false) }
@@ -474,13 +479,16 @@ private fun LandscapeLayout(
                             .weight(1f),
                         onPlayPause = onVisPlayPause,
                         onScrub = onVisScrub,
-                        onRestart = onVisRestart
+                        onRestart = onVisRestart,
+                        onToggleLevel = onToggleLevel
                     )
 
                     // 底部控制条
                     BottomControlBar(
                         architecture = visState.architecture,
-                        activeLevels = visState.activeLevels
+                        activeLevels = visState.activeLevels,
+                        playbackSpeed = visState.playbackSpeed,
+                        onToggleLevel = onToggleLevel
                     )
                 }
             }

@@ -1,11 +1,7 @@
 package com.cloveriris.calcore.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -15,10 +11,21 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Opacity
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.SdStorage
+import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SquareFoot
+import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -29,8 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,7 +45,7 @@ import com.cloveriris.calcore.domain.model.CalculatorMode
 /**
  * 汉堡菜单抽屉内容
  *
- * 窄版设计（260dp），带 Acrylic 半透明背景效果。
+ * 跟随 Material 3 主题默认配色。
  */
 @Composable
 fun DrawerMenu(
@@ -54,40 +60,14 @@ fun DrawerMenu(
     onNavigateToAbout: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // Acrylic 背景：半透明深色 + 右侧边缘光
-    val acrylicBackground = Color(0xE61C1C1C)
-    val edgeGlow = Brush.horizontalGradient(
-        colors = listOf(
-            Color.Transparent,
-            Color.White.copy(alpha = 0.04f)
-        ),
-        startX = 0f,
-        endX = 80f
-    )
-
     ModalDrawerSheet(
-        modifier = modifier
-            .width(260.dp)
-            .fillMaxHeight(),
-        drawerContainerColor = acrylicBackground,
-        drawerTonalElevation = 0.dp
+        modifier = modifier.width(280.dp)
     ) {
-        Box(modifier = Modifier.fillMaxHeight()) {
-            // 右侧边缘光（模拟 Acrylic 的光照边缘）
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(2.dp)
-                    .background(edgeGlow)
-                    .align(Alignment.CenterEnd)
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp)
-            ) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp)
+        ) {
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // 标题
@@ -194,26 +174,25 @@ fun DrawerMenu(
                 // === 转换器 ===
                 DrawerSectionTitle("转换器")
                 val converters = listOf(
-                    "货币" to "\u0024",
-                    "体积" to "V",
-                    "长度" to "L",
-                    "重量" to "W",
-                    "温度" to "T",
-                    "能量" to "E",
-                    "面积" to "A",
-                    "速度" to "S",
-                    "时间" to "t",
-                    "功率" to "P",
-                    "数据" to "D"
+                    "货币" to Icons.Default.Payments,
+                    "体积" to Icons.Default.Opacity,
+                    "长度" to Icons.Default.Straighten,
+                    "重量" to Icons.Default.Scale,
+                    "温度" to Icons.Default.Thermostat,
+                    "能量" to Icons.Default.Bolt,
+                    "面积" to Icons.Default.CropFree,
+                    "速度" to Icons.Default.Speed,
+                    "时间" to Icons.Default.AccessTime,
+                    "功率" to Icons.Default.PowerSettingsNew,
+                    "数据" to Icons.Default.SdStorage
                 )
-                converters.forEach { (label, _) ->
+                converters.forEach { (label, iconVector) ->
                     DrawerItem(
                         label = label,
                         icon = {
-                            Text(
-                                text = label.first().toString(),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
+                            Icon(
+                                imageVector = iconVector,
+                                contentDescription = null,
                                 modifier = Modifier.size(20.dp)
                             )
                         },
@@ -245,7 +224,6 @@ fun DrawerMenu(
             }
         }
     }
-}
 
 @Composable
 private fun DrawerSectionTitle(title: String) {

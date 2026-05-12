@@ -10,7 +10,7 @@ import javax.inject.Singleton
 @Singleton
 class EvaluateUseCase @Inject constructor() {
 
-    fun evaluate(expression: String): Result<Double> {
+    fun evaluate(expression: String, variables: Map<String, Double> = emptyMap()): Result<Double> {
         return try {
             val lexer = Lexer(expression)
             val tokens = lexer.tokenize()
@@ -19,7 +19,7 @@ class EvaluateUseCase @Inject constructor() {
             val ast = parser.parse()
                 ?: return Result.failure(IllegalArgumentException("Failed to parse expression"))
 
-            val result = Evaluator.evaluate(ast)
+            val result = Evaluator.evaluate(ast, variables)
             Result.success(result)
         } catch (e: Exception) {
             Result.failure(e)

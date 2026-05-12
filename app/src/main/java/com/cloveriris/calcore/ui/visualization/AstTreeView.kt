@@ -1,5 +1,11 @@
 package com.cloveriris.calcore.ui.visualization
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,12 +35,14 @@ import com.cloveriris.calcore.ui.theme.TerminalGreen
  * AST 树形可视化
  *
  * 递归渲染表达式树，节点用圆角矩形表示，父子节点用连线连接。
+ * 支持通过 [growthProgress] 控制节点逐层生长显示。
  */
 @Composable
 fun AstTreeView(
     expression: Expression?,
     modifier: Modifier = Modifier,
-    highlightedNode: Expression? = null
+    highlightedNode: Expression? = null,
+    growthProgress: Float = 1.0f
 ) {
     if (expression == null) {
         Box(
@@ -61,7 +69,9 @@ fun AstTreeView(
         AstNode(
             expression = expression,
             highlightedNode = highlightedNode,
-            isRoot = true
+            isRoot = true,
+            depth = 0,
+            growthProgress = growthProgress
         )
     }
 }
@@ -70,60 +80,75 @@ fun AstTreeView(
 private fun AstNode(
     expression: Expression,
     highlightedNode: Expression?,
-    isRoot: Boolean = false
+    isRoot: Boolean = false,
+    depth: Int = 0,
+    growthProgress: Float = 1.0f
 ) {
-    val isHighlighted = expression == highlightedNode
-    val nodeColor = when {
-        isHighlighted -> TerminalGreen.copy(alpha = 0.3f)
-        else -> TerminalGray.copy(alpha = 0.15f)
-    }
-    val textColor = when {
-        isHighlighted -> TerminalGreen
-        else -> TerminalGray.copy(alpha = 0.9f)
-    }
-    val label = expressionLabel(expression)
+    val threshold = depth * 0.25f
+    val isVisible = growthProgress >= threshold
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(animationSpec = tween(400)) +
+                scaleIn(initialScale = 0.5f, animationSpec = tween(400)),
+        exit = fadeOut(animationSpec = tween(200)) +
+                scaleOut(targetScale = 0.5f, animationSpec = tween(200))
     ) {
-        // 节点标签
-        Box(
-            modifier = Modifier
-                .padding(vertical = 8.dp, horizontal = 12.dp)
-                .background(nodeColor, RoundedCornerShape(8.dp))
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = label,
-                color = textColor,
-                fontSize = 14.sp,
-                fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
-                textAlign = TextAlign.Center
-            )
+        val isHighlighted = expression == highlightedNode
+        val nodeColor = when {
+            isHighlighted -> TerminalGreen.copy(alpha = 0.3f)
+            else -> TerminalGray.copy(alpha = 0.15f)
         }
+        val textColor = when {
+            isHighlighted -> TerminalGreen
+            else -> TerminalGray.copy(alpha = 0.9f)
+        }
+        val label = expressionLabel(expression)
 
-        // 子节点
-        val children = expressionChildren(expression)
-        if (children.isNotEmpty()) {
-            // 连线
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // 节点标签
             Box(
                 modifier = Modifier
-                    .width(2.dp)
-                    .height(12.dp)
-                    .background(TerminalGray.copy(alpha = 0.3f))
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.Top
+                    .padding(vertical = 8.dp, horizontal = 12.dp)
+                    .background(nodeColor, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
             ) {
-                children.forEach { child ->
-                    AstNode(
-                        expression = child,
-                        highlightedNode = highlightedNode
-                    )
+                Text(
+                    text = label,
+                    color = textColor,
+                    fontSize = 14.sp,
+                    fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            // 子节点
+            val children = expressionChildren(expression)
+            if (children.isNotEmpty()) {
+                // 连线
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .height(12.dp)
+                        .background(TerminalGray.copy(alpha = 0.3f))
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    children.forEach { child ->
+                        AstNode(
+                            expression = child,
+                            highlightedNode = highlightedNode,
+                            depth = depth + 1,
+                            growthProgress = growthProgress
+                        )
+                    }
                 }
             }
         }
@@ -140,6 +165,7 @@ private fun expressionLabel(expr: Expression): String = when (expr) {
     is Expression.Unary -> operatorSymbol(expr.operator)
     is Expression.FunctionCall -> "${expr.name}()"
     is Expression.ConstantRef -> expr.name
+    is Expression.VariableRef -> expr.name
 }
 
 private fun expressionChildren(expr: Expression): List<Expression> = when (expr) {
@@ -148,6 +174,7 @@ private fun expressionChildren(expr: Expression): List<Expression> = when (expr)
     is Expression.Unary -> listOf(expr.operand)
     is Expression.FunctionCall -> listOf(expr.argument)
     is Expression.ConstantRef -> emptyList()
+    is Expression.VariableRef -> emptyList()
 }
 
 private fun operatorSymbol(op: BinaryOperator): String = when (op) {

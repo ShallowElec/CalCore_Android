@@ -1,8 +1,8 @@
 # Calcore Android 架构设计文档
 
-*版本：v2.1*  
+*版本：v2.2*  
 *日期：2026-05-12*  
-*状态：草案*
+*状态：设计冻结 → 实现中*
 
 ---
 
@@ -174,15 +174,19 @@ com.cloveriris.calcore
 │   │   ├── CalculatorViewModel.kt
 │   │   └── CalculatorUiState.kt
 │   ├── graphing/
-│   │   └── GraphingViewModel.kt        (TODO)
+│   │   └── GraphingViewModel.kt
 │   ├── linearalgebra/
-│   │   └── LinearAlgebraViewModel.kt   (TODO)
+│   │   ├── LinearAlgebraViewModel.kt
+│   │   └── LinearAlgebraUiState.kt
 │   ├── calculus/
-│   │   └── CalculusViewModel.kt        (TODO)
+│   │   ├── CalculusViewModel.kt
+│   │   └── CalculusUiState.kt
 │   ├── diffeq/
-│   │   └── DifferentialEquationsViewModel.kt (TODO)
+│   │   ├── DiffEqViewModel.kt
+│   │   └── DiffEqUiState.kt
 │   └── visualization/
-│       └── VisualizationViewModel.kt
+│       ├── VisualizationViewModel.kt
+│       └── VisualizationUiState.kt
 │
 ├── ui                          # Compose UI 层
 │   ├── calculator/             # CalculatorScreen、Keypads、Display
@@ -191,21 +195,33 @@ com.cloveriris.calcore
 │   │   ├── ScientificKeypad.kt
 │   │   ├── ProgrammerKeypad.kt
 │   │   └── ProgrammerDisplay.kt
-│   ├── graphing/               # GraphingScreen、ExpressionList、Viewport2D/3D
-│   │   └── GraphingScreen.kt   (TODO)
-│   ├── linearalgebra/          # MatrixEditor、OperationToolbar、ResultPanel
-│   │   └── LinearAlgebraScreen.kt (TODO)
-│   ├── calculus/               # CalculusScreen、StepAnimator、GeometryCanvas
-│   │   └── CalculusScreen.kt   (TODO)
-│   ├── diffeq/                 # DifferentialEquationsScreen、PhasePortraitCanvas
-│   │   └── DifferentialEquationsScreen.kt (TODO)
-│   ├── visualization/          # BitGrid、RegisterBank、MemoryGrid、StackView、AstTreeView、TimelineScrubber
+│   ├── graphing/               # GraphingScreen、ExpressionList、CoordinateCanvas
+│   │   └── GraphingScreen.kt
+│   ├── linearalgebra/          # MatrixEditor、OperationToolbar、ResultPanel、VectorTransformCanvas
+│   │   ├── LinearAlgebraScreen.kt
+│   │   ├── MatrixEditor.kt
+│   │   ├── MatrixListPanel.kt
+│   │   ├── OperationToolbar.kt
+│   │   ├── ResultPanel.kt
+│   │   └── VectorTransformCanvas.kt
+│   ├── calculus/               # CalculusScreen、GeometryCanvas、ParameterInputBar
+│   │   └── CalculusScreen.kt
+│   ├── diffeq/                 # DiffEqScreen、TemplateSelector、ParameterSliderPanel
+│   │   └── DifferentialEquationsScreen.kt
+│   ├── visualization/          # L1-L8 全部可视化组件
 │   │   ├── VisualizationStage.kt
 │   │   ├── BitGrid.kt
 │   │   ├── RegisterBank.kt
 │   │   ├── MemoryGrid.kt
 │   │   ├── StackView.kt
+│   │   ├── LinkedListView.kt
 │   │   ├── AstTreeView.kt
+│   │   ├── OperatorStackView.kt
+│   │   ├── LogicGateGrid.kt
+│   │   ├── AluVisualizer.kt
+│   │   ├── AddressBusView.kt
+│   │   ├── InstructionPipeline.kt
+│   │   ├── DisplayBufferView.kt
 │   │   ├── TimelineScrubber.kt
 │   │   └── BottomControlBar.kt
 │   ├── components/             # 跨模块共享组件
@@ -213,10 +229,10 @@ com.cloveriris.calcore
 │   │   ├── CalcoreDisplay.kt
 │   │   ├── DrawerMenu.kt
 │   │   ├── ScrollableKeypadContainer.kt
-│   │   ├── ExpressionInputBar.kt        (TODO)
-│   │   ├── ParameterSliderPanel.kt      (TODO)
-│   │   ├── TemplateSelector.kt          (TODO)
-│   │   └── CoordinateCanvas.kt          (TODO)
+│   │   ├── ExpressionInputBar.kt
+│   │   ├── ParameterSliderPanel.kt
+│   │   ├── TemplateSelector.kt
+│   │   └── CoordinateCanvas.kt
 │   └── theme/
 │       ├── Color.kt
 │       ├── Type.kt
@@ -308,6 +324,50 @@ com.cloveriris.calcore
              → 更新 UiState → Screen 重组（几何动画/矩阵/相图）
 ```
 
+### 6.4 架构模型与播放速度控制
+
+#### 6.4.1 Architecture 抽象模型
+
+```kotlin
+enum class Architecture(
+    val displayName: String,
+    val registerNames: List<String>,
+    val spRegisterName: String,      // 栈指针寄存器名
+    val fpRegisterName: String,      // 帧指针寄存器名
+    val stackGrowsDown: Boolean,     // 主流架构均为 true
+    val addressingMode: AddressingMode,
+    val mnemonicPrefix: String
+)
+```
+
+| 架构 | SP | FP | 寻址方式 | 指令风格 |
+|------|-----|-----|---------|---------|
+| x86-64 | RSP | RBP | SEGMENT_OFFSET | CISC (PUSH/POP/CALL) |
+| ARM64 | SP | X29 | BASE_INDEX_OFFSET | RISC (STP/LDP/BL) |
+| RISC-V | SP | S0 | BASE_INDEX_OFFSET | RISC (ADDI SP/JAL) |
+
+**影响范围**：
+- `VisualizationEngine.generateScript(event, architecture)`：根据架构生成不同的指令助记符、寄存器名、栈指针标签。
+- `RegisterBank`：使用 `architecture.registerNames` 初始化默认寄存器列表。
+- `StackView`：使用 `architecture.spRegisterName` 标注栈指针箭头。
+- `AddressBusView`：x86-64 展示段选择子+偏移量拼接；ARM64/RISC-V 展示基址+索引+偏移。
+
+#### 6.4.2 动画播放速度控制
+
+```kotlin
+// VisualizationViewModel
+private val baseStepIntervalMs = 200L  // 基准 tick = 200ms
+
+// 实际延迟 = baseStepIntervalMs / playbackSpeed
+// speed = 0.2x → 1000ms/step（极慢观察）
+// speed = 1.0x → 200ms/step（默认）
+// speed = 2.0x → 100ms/step（快速浏览）
+```
+
+- `playbackSpeed` 属于 `VisualizationUiState`，范围 `0.2f..2.0f`。
+- 速度通过 `SettingsScreen` 的 Slider 调节，设置页通过 parent backstack entry 共享 `VisualizationViewModel` 实例。
+- 脚本步数 = `totalDurationMs / baseStepIntervalMs`，确保不同总长度的脚本播放时间一致。
+
 ---
 
 ## 7. 渲染管线设计
@@ -315,39 +375,35 @@ com.cloveriris.calcore
 ### 7.1 2D 可视化舞台（Compose Canvas）— 计算器模式
 
 ```
-用户按键 → ViewModel 生成 AnimationEvent
+用户按键 → CalculatorViewModel 生成 AnimationEvent
                 ↓
-    VisualizationViewModel 接收 Event
+    VisualizationViewModel.onEvent(event)
                 ↓
-    状态更新：uiState = uiState.copy(
-                bitGridBits = newBits,
-                registers = newRegs,
-                currentAst = ast,
-                evaluationProgress = progress
-              )
+    VisualizationEngine.generateScript(event, architecture)
+        → 生成按时间排序的 TimedAction 列表（L1-L8 全覆盖）
+                ↓
+    ScriptPlayer 按 playbackSpeed 驱动回放
+        → 每 200ms / speed 一个 step
+        → applyScriptAtProgress(progress) 累积式更新状态
                 ↓
     Compose 重组 → VisualizationStage Composable
                 ↓
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        drawBitGrid(bitGridBits)
-        drawRegisterBank(registers)
-        drawAstTree(astRoot)
-        drawTimelineScrubber(progress)
-    }
-                ↓
-    LaunchedEffect(animating) {
-        while (animating) {
-            progress += step
-            delay(80)
-        }
-    }
+    各层级 Canvas 组件根据状态独立绘制
 ```
+
+**状态归约器（Reducer）设计**：
+- `VisualizationViewModel.reduceAction(state, action)` 是单一状态变换入口。
+- 每个 `AnimationAction` 子类对应一个不可变的 `copy()` 变换，避免清空重建导致的闪烁。
+- 新 Action **平滑覆盖**旧字段：例如 `UpdateRegister` 只修改目标寄存器，保留其余寄存器状态。
 
 **性能策略**：
 - `Canvas` 的 `draw` lambda 在后台线程的 Skia 中执行，但状态更新在主线程。
 - 使用 `remember { Path() }` 缓存静态路径（如内存网格线），避免每帧重建。
 - 位格翻转动画使用 `Animatable<Float>` 控制 alpha/scale，而非每帧重算 Path。
 - 大型内存网格启用裁剪：只绘制视口内单元格。
+- **⚡ 栈帧滑动动画**：`StackView` 使用 `Animatable` 驱动 `progress`，在 `DrawScope` 中实时计算滑块坐标，避免触发额外重组。
+- **⚡ 链表连线生长**：`LinkedListView` 的 Wire Overlay 使用独立 `Canvas` 覆盖层，与节点 Row 分离，减少不必要的节点重组。
+- **⚡ 光标平滑移动**：`MemoryGrid` 追踪 `previousCursorAddress`，通过 `Animatable(0f→1f)` 插值实现 250ms 平滑过渡，不依赖连续重组。
 
 ### 7.2 数学工作台渲染（Compose Canvas）
 
@@ -405,18 +461,18 @@ com.cloveriris.calcore
 
 ## 8. 可视化分层
 
-### 8.1 L1-L8（计算器模式）— 已有，保持不变
+### 8.1 L1-L8（计算器模式）— 已实现
 
-| 层级 | 展示内容 | 动画表现形式 |
-|------|---------|-------------|
-| **L1: 布尔代数** | 逻辑门 (AND/OR/XOR/NOT) 对每一位的运算 | 绿色信号流在逻辑门网格中流动 |
-| **L2: 数值表示** | int / float / double 的 IEEE 754 / 补码二进制展开 | 位格翻转动画，符号位/指数位/尾数位高亮 |
-| **L3: 寄存器与ALU** | 64-bit 寄存器组 (RISC-V/ARM64/x86-64 抽象模型) | 寄存器槽位高亮，数据搬运路径 |
-| **L4: 内存布局** | 栈区、堆区、数据段、常量池 | 绿色实心/空心方块构成的内存网格 |
-| **L5: 数据结构** | 表达式解析用的链表、操作数数组、运算符栈 | 链表节点用绿色方块串联，指针用箭头/连线 |
-| **L6: 指针与寻址** | 内存地址、段偏移、指针解引用 | 地址总线动画，指针段位移拼接 |
-| **L7: 指令集抽象** | 模拟 RISC-V / ARM64 / x86-64 的指令执行流 | 指令取指→译码→执行→写回的流水线动画 |
-| **L8: 结果回显** | 计算结果从寄存器 → 内存缓冲区 → 显示驱动 | 数据流汇聚到显示区域 |
+| 层级 | 组件 | 展示内容 | 动画表现形式 | 关键模型 |
+|------|------|---------|-------------|---------|
+| **L1: 布尔代数** | `LogicGateGrid` | 逻辑门 (AND/OR/XOR/NOT) 对每一位的运算 | 绿色信号流在逻辑门网格中流动；`signalProgress` 控制流过的光点 | `AnimationAction.UpdateLogicGates` |
+| **L2: 数值表示** | `BitGrid` | int/float/double 的 IEEE 754 / 补码二进制展开 | 64 位格（8×8 或 1×64）；位翻转时颜色过渡；IEEE 754 模式下高亮符号位/指数位/尾数位（琥珀色三角标记） | `AnimationAction.UpdateBitGrid` + `UpdateBitGridHighlights` |
+| **L3: 寄存器与ALU** | `RegisterBank` + `AluVisualizer` | 64-bit 寄存器组（架构相关命名） | 寄存器槽位高亮（`isHighlighted`）；16 组 4-bit Hex 块显示寄存器值；`DataPathVisual` 驱动绿色流光曲线（贝塞尔光点）从源寄存器流向目标 | `AnimationAction.UpdateRegister` + `UpdateDataPath` + `UpdateAluOperation` |
+| **L4: 内存布局** | `MemoryGrid` + `StackView` | 内存网格（堆/数据段）+ 栈帧堆叠 | **内存**：绿色实心=已分配数据，绿色空心=指针/空闲槽位；光标读取头（琥珀色边框+三角）平滑移动；写入时白色脉冲边框。**栈**：PUSH 时方块从寄存器区滑入栈顶；POP 时滑出；SP 箭头同步移动并闪烁 | `AnimationAction.WriteMemory` + `PushStack/PopStack` + `UpdateStackPointer` + `UpdateStackAnimation` |
+| **L5: 数据结构** | `LinkedListView` + `OperatorStackView` + `AstTreeView` | 链表节点、运算符栈、AST 生长 | **链表**：实心方块=数据节点，空心方块=指针节点；新节点插入时缩放淡入；指针连线使用 Canvas Overlay 绘制贝塞尔生长曲线（流光点+箭头头）。**AST**：`growthProgress` 控制节点逐个出现 | `AnimationAction.UpdateLinkedList` + `AnimateLinkedListWire` + `UpdateAstGrowth` |
+| **L6: 指针与寻址** | `AddressBusView` | 内存地址（64-bit 虚拟地址）、段偏移、指针解引用 | SEG 方块 + OFF 方块 → ALU 拼接 → ADDR 结果方块；三段贝塞尔曲线绿色流光依次点亮；x86 展示段选择子+偏移量，ARM/RISC-V 展示基址+索引+偏移 | `AnimationAction.UpdateAddressBus` + `AnimateMemoryPointer` |
+| **L7: 指令集抽象** | `InstructionPipeline` | 模拟 RISC-V/ARM64/x86-64 指令执行流 | FETCH→DECODE→EXECUTE→WRITEBACK 四阶段流水线；当前阶段高亮并显示架构相关助记符（如 ARM64 `STP X0, X1, [SP, #-16]!`） | `AnimationAction.UpdateInstructionPipeline` |
+| **L8: 结果回显** | `DisplayBufferView` | 计算结果从寄存器→内存缓冲区→显示驱动 | `resultFlowProgress` 控制数据流汇聚；显示缓冲区同步光标位置与输入状态 | `AnimationAction.UpdateDisplayBuffer` + `UpdateResultFlow` |
 
 ### 8.2 G1-G4（图形与数学工作台）— 新增
 
@@ -505,9 +561,10 @@ data class TemplateParameter(
 
 ### 11.1 零破坏原则
 
-- `CalculatorScreen`、`CalculatorViewModel`、`CalculatorMode`（STANDARD/SCIENTIFIC/PROGRAMMER/DATE）**不做任何结构性修改**。
-- `VisualizationStage/VisualizationViewModel`（L1-L8）**不做任何修改**。
-- `engine.parser` 和 `engine.evaluator` **向后兼容**；新增 AST 节点类型（如 `MatrixLiteral`）时，全局搜索所有 `when(expr)` 并补充新分支。
+- `CalculatorScreen`、`CalculatorViewModel`、`CalculatorMode`（STANDARD/SCIENTIFIC/PROGRAMMER/DATE）**不做结构性修改**（仅增加 `onToggleLevel` 参数透传）。
+- `engine.parser` 和 `engine.evaluator` **向后兼容**。
+- `VisualizationStage/VisualizationViewModel` 允许**扩展式修改**：新增字段使用默认值，新增 Action 类型在 `reduceAction` 中补充分支，不破坏现有调用方。
+- **架构模型演进**：`Architecture` enum 从简单 `(displayName, registerNames)` 扩展为包含 `spRegisterName`、`fpRegisterName`、`stackGrowsDown`、`addressingMode`、`mnemonicPrefix` 的丰富模型，所有原有调用点通过默认参数保持兼容。
 
 ### 11.2 新增内容清单
 
@@ -526,29 +583,34 @@ data class TemplateParameter(
 
 | 指标 | 目标 | 实现策略 |
 |---|---|---|
-| 按键 → 首帧动画 | ≤ 100ms | 预计算状态，延迟 16ms 启动协程 |
-| 动画帧率 | 60 FPS | `delay(16)` + 裁剪绘制区域 |
+| 按键 → 首帧动画 | ≤ 100ms | 预计算状态，`VisualizationEngine.generateScript` 纯 Kotlin 无 IO；延迟 16ms 启动协程 |
+| 动画帧率 | 60 FPS | `delay(16)` + 裁剪绘制区域；`Animatable` 驱动避免连续重组 |
 | 2D 函数采样+渲染 | ≤ 16ms | 自适应步长 + 后台 Coroutine 采样 |
 | 3D 网格渲染 (10k 顶点) | ≤ 16ms | VBO + 视锥裁剪 + LOD（M6） |
 | 矩阵运算 (≤10×10) | ≤ 50ms | `Dispatchers.Default` + 逐步动画分帧 |
 | ODE 求解 (1000 步 RK4) | ≤ 200ms | `Dispatchers.Default`，结果流式回传 |
-| 内存峰值 | ≤ 256MB | 大网格流式加载；历史记录限制 1000 条 |
+| 可视化 Canvas 绘制 | ≤ 8ms/帧 | Stack/LinkedList/Memory 均使用 `remember` 缓存 `TextMeasurer`；路径复用；避免在 `drawScope` 中创建对象 |
+| 内存峰值 | ≤ 256MB | 大网格流式加载；历史记录限制 1000 条；`AnimationScript` 事件列表 ≤ 50 个 |
 | APK 体积 | ≤ 50MB | 按需加载着色器；资源压缩 |
 
 ---
 
 ## 13. 实施路线图
 
-| 阶段 | 目标 | 关键交付 |
-|------|------|---------|
-| **M5a** | 图形模式骨架 | GraphingScreen 三栏布局、2D 坐标系 Canvas、表达式列表管理 |
-| **M5b** | 图形模式功能 | 显函数、参数曲线、极坐标、不等式渲染；参数滑块；模板系统骨架 |
-| **M6a** | 线性代数工作台 | 矩阵 Grid 编辑器、基本运算、特征值 / SVD、2D 向量变换动画 |
-| **M6b** | 微积分可视化 | 极限动画、导数几何（切线/法线/曲率圆）、积分近似（黎曼/梯形/Simpson） |
-| **M7a** | 微分方程工作台 | ODE 数值求解（RK4）、相图绘制、方向场、PDE 有限差分 |
-| **M7b** | 高级可视化 | PDE 全场演化动画、G1-G4 可视化分层完善 |
-| **M8** | 模板与参数动画 | 12+ 预置模板、参数驱动、动画导出（快照/视频） |
-| **M9** | 跨模块联动与抛光 | 计算器结果发送到图形/微积分模块、3B1B 级动画质感调优、公开发布 |
+| 阶段 | 目标 | 关键交付 | 状态 |
+|------|------|---------|------|
+| **M1** | 表达式引擎 | Lexer/Parser/AST/Evaluator、64-bit 高精度计算 | ✅ 完成 |
+| **M2** | 计算器骨架 | Standard/Scientific/Programmer/Date 模式、历史记录、内存 | ✅ 完成 |
+| **M3** | L1-L8 可视化引擎 | BitGrid、RegisterBank、MemoryGrid、StackView、AST、LinkedList、AddressBus、Pipeline、DisplayBuffer | ✅ 完成 |
+| **M4** | 可视化动画规范 | PUSH/POP 滑动动画、指针连线生长、光标平滑移动、多架构切换、播放速度控制 | ✅ 完成 |
+| **M5a** | 图形模式骨架 | GraphingScreen 三栏布局、2D 坐标系 Canvas、表达式列表管理、9 个模板 | ✅ 完成 |
+| **M5b** | 图形模式功能 | 显函数、参数曲线、极坐标、不等式渲染；参数滑块；模板系统 | ✅ 完成 |
+| **M6a** | 线性代数工作台 | 矩阵 Grid 编辑器、基本运算（加/乘/转置/逆/特征值）、2D 向量变换动画 | ✅ 完成 |
+| **M6b** | 微积分可视化 | 极限动画、导数几何（切线/法线）、积分近似（黎曼/梯形/Simpson）、泰勒展开 | ✅ 完成 |
+| **M7a** | 微分方程工作台 | ODE 数值求解（Euler/RK4/RKF45）、相图绘制、方向场、3 个预设模板 | ✅ 完成 |
+| **M7b** | 高级可视化 | PDE 全场演化动画、G1-G4 可视化分层完善 | ⏳ 待实现 |
+| **M8** | 模板与参数动画 | 12+ 预置模板、参数驱动、动画导出（快照/视频） | ⏳ 待实现 |
+| **M9** | 跨模块联动与抛光 | 计算器结果发送到图形/微积分模块、3B1B 级动画质感调优、公开发布 | ⏳ 待实现 |
 
 ---
 

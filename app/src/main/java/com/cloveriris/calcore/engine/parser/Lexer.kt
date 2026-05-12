@@ -112,7 +112,7 @@ class Lexer(private val input: String) {
         return when {
             literal in constants -> Token.Constant(literal, constants[literal]!!)
             literal in functions -> Token.Function(literal)
-            else -> Token.Illegal(literal)
+            else -> Token.Variable(literal)
         }
     }
 

@@ -27,6 +27,9 @@ sealed class Token {
     // 常量
     data class Constant(override val literal: String, val value: Double) : Token()
 
+    // 变量（如 x, y, t, a, b...）
+    data class Variable(override val literal: String) : Token()
+
     // 结束符
     data object EOF : Token() {
         override val literal: String = ""

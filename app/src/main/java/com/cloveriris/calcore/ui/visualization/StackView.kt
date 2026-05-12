@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -21,16 +22,29 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cloveriris.calcore.domain.model.AnimationAction
+import com.cloveriris.calcore.presentation.visualization.StackAnimationState
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
 import com.cloveriris.calcore.ui.theme.TerminalAmber
+import com.cloveriris.calcore.ui.theme.TerminalBackground
 import com.cloveriris.calcore.ui.theme.TerminalGreen
 import com.cloveriris.calcore.ui.theme.TerminalGray
 
 /**
- * 栈可视化组件
+ * 栈可视化组件（L4 堆栈搬运过程）
+ *
+ * 特性：
+ * - 栈帧垂直堆叠，支持向下生长（主流架构）
+ * - PUSH：绿色实心方块从寄存器区滑入栈顶
+ * - POP：方块从栈顶滑出至寄存器/ALU 区
+ * - 栈指针 (SP) 箭头随 PUSH/POP 同步移动并高亮
+ * - 函数调用多层栈帧叠加展示
  *
  * @param frames 栈帧列表，从底到顶
- * @param spValue 栈指针值（高亮位置）
+ * @param spValue 当前栈指针显示值
+ * @param spHighlighted SP 是否高亮
+ * @param stackAnimation 当前栈动画状态（PUSH/POP 滑入滑出）
+ * @param spRegisterName 栈指针寄存器名（如 RSP / SP）
  */
 data class StackFrameVisual(
     val label: String,
@@ -42,108 +56,233 @@ data class StackFrameVisual(
 fun StackView(
     frames: List<StackFrameVisual>,
     modifier: Modifier = Modifier,
-    spValue: String = "RSP"
+    spValue: String = "",
+    spHighlighted: Boolean = false,
+    stackAnimation: StackAnimationState = StackAnimationState(),
+    spRegisterName: String = "SP"
 ) {
     val textMeasurer = rememberTextMeasurer()
+    val animProgress = remember(stackAnimation) {
+        Animatable(stackAnimation.progress)
+    }
+    LaunchedEffect(stackAnimation.progress) {
+        animProgress.animateTo(stackAnimation.progress, tween(200))
+    }
+
+    // 预估高度：每帧 36dp + 顶部寄存器区 48dp + 底部间隙
+    val canvasHeight = ((frames.size + 1) * 36 + 56).dp
 
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .height((frames.size * 36 + 40).dp)
+            .height(canvasHeight)
             .padding(8.dp)
     ) {
         val rowHeight = 32.dp.toPx()
         val gap = 4.dp.toPx()
+        val regAreaHeight = 44.dp.toPx()
+        val stackStartY = regAreaHeight + 8.dp.toPx()
+        val frameWidth = size.width * 0.72f
+        val spArrowX = frameWidth + 16.dp.toPx()
 
-        // 栈指针标签
-        val spLayout = textMeasurer.measure(
-            "▼ $spValue",
-            TextStyle(
-                color = TerminalAmber,
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace
-            )
+        // 绘制寄存器区背景（PUSH 时方块从此滑出，POP 时方块滑入此处）
+        drawRect(
+            color = TerminalBackground,
+            topLeft = Offset(0f, 0f),
+            size = Size(frameWidth, regAreaHeight)
         )
+        drawRect(
+            color = TerminalGray.copy(alpha = 0.3f),
+            topLeft = Offset(0f, 0f),
+            size = Size(frameWidth, regAreaHeight),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+        )
+        val regLabel = textMeasurer.measure(
+            "REG / ALU",
+            TextStyle(color = TerminalGray.copy(alpha = 0.5f), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        )
+        drawText(regLabel, topLeft = Offset(4.dp.toPx(), 2.dp.toPx()))
 
-        frames.reversed().forEachIndexed { index, frame ->
-            val y = index * (rowHeight + gap)
-            val isTop = index == 0
-
-            // 栈帧背景
-            val bgColor = when {
-                isTop -> TerminalGreen.copy(alpha = 0.2f)
-                frame.isActive -> TerminalAmber.copy(alpha = 0.15f)
-                else -> Color(0xFF1F1F1F)
-            }
-
-            drawRect(
-                color = bgColor,
-                topLeft = Offset(0f, y),
-                size = Size(size.width * 0.7f, rowHeight)
-            )
-
-            // 边框
-            if (isTop) {
-                drawRect(
-                    color = TerminalGreen,
-                    topLeft = Offset(0f, y),
-                    size = Size(size.width * 0.7f, rowHeight),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
-                )
-            }
-
-            // 标签文字
-            val labelLayout = textMeasurer.measure(
-                frame.label,
-                TextStyle(
-                    color = if (isTop) TerminalGreen else TerminalGray,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-            )
-            drawText(
-                labelLayout,
-                topLeft = Offset(8.dp.toPx(), y + (rowHeight - labelLayout.size.height) / 2)
-            )
-
-            // 值文字
-            val valueLayout = textMeasurer.measure(
-                frame.value,
-                TextStyle(
-                    color = if (isTop) TerminalGreen else TerminalGray.copy(alpha = 0.7f),
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-            )
-            drawText(
-                valueLayout,
-                topLeft = Offset(
-                    size.width * 0.4f,
-                    y + (rowHeight - valueLayout.size.height) / 2
-                )
+        // 绘制 PUSH 动画滑块（从寄存器区滑向栈顶）
+        if (stackAnimation.operation == AnimationAction.StackOperationType.PUSH && frames.isNotEmpty()) {
+            val topFrameIndex = 0 // 栈顶在 reversed 后是 0
+            val targetY = stackStartY + topFrameIndex * (rowHeight + gap)
+            val currentY = regAreaHeight - rowHeight + (targetY - (regAreaHeight - rowHeight)) * animProgress.value
+            val alpha = 0.3f + 0.7f * animProgress.value
+            drawStackBlock(
+                x = 0f, y = currentY,
+                width = frameWidth, height = rowHeight,
+                label = stackAnimation.frameLabel,
+                value = stackAnimation.frameValue,
+                isTop = true,
+                alpha = alpha,
+                textMeasurer = textMeasurer
             )
         }
 
-        // 绘制栈指针箭头
-        if (frames.isNotEmpty()) {
-            drawText(
-                spLayout,
-                topLeft = Offset(size.width * 0.75f, 0f)
+        // 绘制 POP 动画滑块（从栈顶滑向寄存器区）
+        if (stackAnimation.operation == AnimationAction.StackOperationType.POP && frames.isNotEmpty()) {
+            val topFrameIndex = 0
+            val startY = stackStartY + topFrameIndex * (rowHeight + gap)
+            val targetY = regAreaHeight - rowHeight
+            val currentY = startY + (targetY - startY) * animProgress.value
+            val alpha = 1.0f - 0.7f * animProgress.value
+            drawStackBlock(
+                x = 0f, y = currentY,
+                width = frameWidth, height = rowHeight,
+                label = stackAnimation.frameLabel,
+                value = stackAnimation.frameValue,
+                isTop = true,
+                alpha = alpha,
+                textMeasurer = textMeasurer
             )
+        }
+
+        // 绘制稳定栈帧（从底到顶，反转后从上到下绘制）
+        val visibleFrames = when (stackAnimation.operation) {
+            AnimationAction.StackOperationType.PUSH -> if (animProgress.value > 0.9f) frames else frames.dropLast(1)
+            AnimationAction.StackOperationType.POP -> if (animProgress.value > 0.1f) frames else frames.dropLast(1)
+            else -> frames
+        }
+
+        visibleFrames.reversed().forEachIndexed { index, frame ->
+            val y = stackStartY + index * (rowHeight + gap)
+            val isTop = index == 0
+            drawStackBlock(
+                x = 0f, y = y,
+                width = frameWidth, height = rowHeight,
+                label = frame.label,
+                value = frame.value,
+                isTop = isTop,
+                alpha = 1f,
+                textMeasurer = textMeasurer
+            )
+        }
+
+        // 绘制栈指针箭头与标签
+        val spY = if (frames.isEmpty()) {
+            stackStartY
+        } else {
+            stackStartY - rowHeight * 0.2f
+        }
+        val spText = if (spValue.isNotEmpty()) "▼ $spRegisterName = $spValue" else "▼ $spRegisterName"
+        val spColor = if (spHighlighted) TerminalAmber else TerminalGray
+        val spLayout = textMeasurer.measure(
+            spText,
+            TextStyle(color = spColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+        )
+        drawText(spLayout, topLeft = Offset(spArrowX, spY.coerceAtLeast(0f)))
+
+        // SP 高亮时绘制闪烁箭头
+        if (spHighlighted) {
+            val arrowPath = androidx.compose.ui.graphics.Path().apply {
+                val ax = spArrowX - 10.dp.toPx()
+                val ay = spY + spLayout.size.height / 2f
+                moveTo(ax, ay - 6.dp.toPx())
+                lineTo(ax - 6.dp.toPx(), ay + 4.dp.toPx())
+                lineTo(ax + 6.dp.toPx(), ay + 4.dp.toPx())
+                close()
+            }
+            drawPath(path = arrowPath, color = TerminalAmber.copy(alpha = 0.6f + 0.4f * animProgress.value))
         }
     }
+}
+
+private fun DrawScope.drawStackBlock(
+    x: Float, y: Float,
+    width: Float, height: Float,
+    label: String,
+    value: String,
+    isTop: Boolean,
+    alpha: Float,
+    textMeasurer: TextMeasurer
+) {
+    val bgColor = when {
+        isTop -> TerminalGreen.copy(alpha = 0.2f * alpha)
+        else -> Color(0xFF1F1F1F).copy(alpha = alpha)
+    }
+    val borderColor = when {
+        isTop -> TerminalGreen.copy(alpha = 0.9f * alpha)
+        else -> TerminalGray.copy(alpha = 0.3f * alpha)
+    }
+
+    // 背景
+    drawRect(
+        color = bgColor,
+        topLeft = Offset(x, y),
+        size = Size(width, height)
+    )
+
+    // 边框（绿色实心 = 已分配数据）
+    drawRect(
+        color = borderColor,
+        topLeft = Offset(x, y),
+        size = Size(width, height),
+        style = androidx.compose.ui.graphics.drawscope.Stroke(width = if (isTop) 2.dp.toPx() else 1.dp.toPx())
+    )
+
+    // 标签文字
+    val labelLayout = textMeasurer.measure(
+        label,
+        TextStyle(
+            color = if (isTop) TerminalGreen.copy(alpha = alpha) else TerminalGray.copy(alpha = 0.8f * alpha),
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace
+        )
+    )
+    drawText(
+        labelLayout,
+        topLeft = Offset(x + 8.dp.toPx(), y + (height - labelLayout.size.height) / 2)
+    )
+
+    // 值文字
+    val valueLayout = textMeasurer.measure(
+        value,
+        TextStyle(
+            color = if (isTop) TerminalGreen.copy(alpha = alpha) else TerminalGray.copy(alpha = 0.6f * alpha),
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace
+        )
+    )
+    drawText(
+        valueLayout,
+        topLeft = Offset(x + width * 0.45f, y + (height - valueLayout.size.height) / 2)
+    )
 }
 
 @Preview(showBackground = true, backgroundColor = 0xFF0A0A0A)
 @Composable
 private fun StackViewPreview() {
     CalcoreTheme {
-        val frames = listOf(
-            StackFrameVisual("main()", "0x7FFE_EFBC9000"),
-            StackFrameVisual("fact(3)", "0x7FFE_EFBC8FE0", isActive = true),
-            StackFrameVisual("fact(2)", "0x7FFE_EFBC8FC0", isActive = true),
-            StackFrameVisual("fact(1)", "0x7FFE_EFBC8FA0", isActive = true)
+        StackView(
+            frames = listOf(
+                StackFrameVisual("main()", "0x7FFE_EFBC9000"),
+                StackFrameVisual("fact(3)", "0x7FFE_EFBC8FE0", isActive = true),
+                StackFrameVisual("fact(2)", "0x7FFE_EFBC8FC0", isActive = true),
+                StackFrameVisual("fact(1)", "0x7FFE_EFBC8FA0", isActive = true)
+            ),
+            spValue = "0x7FFE_EFBC8F80",
+            spHighlighted = true,
+            stackAnimation = StackAnimationState(
+                operation = AnimationAction.StackOperationType.PUSH,
+                progress = 0.6f,
+                frameLabel = "fact(0)",
+                frameValue = "0x7FFE_EFBC8F80",
+                registerName = "RSP"
+            ),
+            spRegisterName = "RSP"
         )
-        StackView(frames = frames)
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF0A0A0A)
+@Composable
+private fun StackViewEmptyPreview() {
+    CalcoreTheme {
+        StackView(
+            frames = emptyList(),
+            spValue = "0x7FFE_EFBC9000",
+            spRegisterName = "RSP"
+        )
     }
 }

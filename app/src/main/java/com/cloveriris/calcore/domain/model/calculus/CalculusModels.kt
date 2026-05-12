@@ -110,6 +110,35 @@ enum class IntegrationMethod {
 }
 
 /**
+ * 导数配置
+ */
+data class DerivativeConfig(
+    val function: String,
+    val point: Double,
+    val stepSize: Double = 0.01
+)
+
+/**
+ * 导数计算结果
+ */
+data class DerivativeResult(
+    val slope: Double,
+    val functionValue: Double,
+    val steps: List<CalculusStep>,
+    val geometryFrames: List<GeometryFrame>
+)
+
+/**
+ * 极限可视化配置
+ */
+data class LimitConfig(
+    val function: String,
+    val approachPoint: Double,
+    val limitValue: Double,
+    val epsilonRange: Double = 2.0
+)
+
+/**
  * 泰勒展开配置
  */
 data class TaylorConfig(

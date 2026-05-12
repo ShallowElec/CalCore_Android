@@ -12,19 +12,20 @@ import kotlin.math.*
  */
 object Evaluator {
 
-    fun evaluate(expression: Expression): Double {
+    fun evaluate(expression: Expression, variables: Map<String, Double> = emptyMap()): Double {
         return when (expression) {
             is Expression.NumberLiteral -> expression.value
             is Expression.ConstantRef -> expression.value
-            is Expression.Binary -> evaluateBinary(expression)
-            is Expression.Unary -> evaluateUnary(expression)
-            is Expression.FunctionCall -> evaluateFunction(expression)
+            is Expression.VariableRef -> variables[expression.name] ?: 0.0
+            is Expression.Binary -> evaluateBinary(expression, variables)
+            is Expression.Unary -> evaluateUnary(expression, variables)
+            is Expression.FunctionCall -> evaluateFunction(expression, variables)
         }
     }
 
-    private fun evaluateBinary(expr: Expression.Binary): Double {
-        val left = evaluate(expr.left)
-        val right = evaluate(expr.right)
+    private fun evaluateBinary(expr: Expression.Binary, variables: Map<String, Double>): Double {
+        val left = evaluate(expr.left, variables)
+        val right = evaluate(expr.right, variables)
 
         return when (expr.operator) {
             BinaryOperator.ADD -> left + right
@@ -35,16 +36,16 @@ object Evaluator {
         }
     }
 
-    private fun evaluateUnary(expr: Expression.Unary): Double {
-        val operand = evaluate(expr.operand)
+    private fun evaluateUnary(expr: Expression.Unary, variables: Map<String, Double>): Double {
+        val operand = evaluate(expr.operand, variables)
         return when (expr.operator) {
             UnaryOperator.NEGATE -> -operand
             UnaryOperator.PERCENT -> operand / 100.0
         }
     }
 
-    private fun evaluateFunction(expr: Expression.FunctionCall): Double {
-        val arg = evaluate(expr.argument)
+    private fun evaluateFunction(expr: Expression.FunctionCall, variables: Map<String, Double>): Double {
+        val arg = evaluate(expr.argument, variables)
         return when (expr.name.lowercase()) {
             "sin" -> sin(arg)
             "cos" -> cos(arg)

@@ -38,6 +38,11 @@ sealed class Expression {
      * 常量引用，如 π, e
      */
     data class ConstantRef(val name: String, val value: Double) : Expression()
+
+    /**
+     * 变量引用，如 x, y, t, a, b...
+     */
+    data class VariableRef(val name: String) : Expression()
 }
 
 enum class BinaryOperator {

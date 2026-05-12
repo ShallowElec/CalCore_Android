@@ -13,7 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -23,7 +25,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloveriris.calcore.ui.theme.CalcoreTheme
+import com.cloveriris.calcore.ui.theme.SkyBlue
+import com.cloveriris.calcore.ui.theme.TerminalAmber
 import com.cloveriris.calcore.ui.theme.TerminalGreen
+import com.cloveriris.calcore.ui.theme.TerminalGray
 
 /**
  * 64-bit 位格可视化组件
@@ -31,6 +36,8 @@ import com.cloveriris.calcore.ui.theme.TerminalGreen
  * @param bits 64 个布尔值，表示每一位的状态
  * @param labels 可选的位标签（如符号位、指数位、尾数位）
  * @param layout 布局方式：8×8 网格或 1×64 横向条
+ * @param highlights 高亮的 bit 索引集合（L2）
+ * @param label 位格标签，用于触发 IEEE 754 分区标注
  */
 enum class BitGridLayout { GRID_8X8, BAR_1X64 }
 
@@ -39,7 +46,9 @@ fun BitGrid(
     bits: List<Boolean>,
     modifier: Modifier = Modifier,
     layout: BitGridLayout = BitGridLayout.GRID_8X8,
-    labels: List<String>? = null
+    labels: List<String>? = null,
+    highlights: Set<Int> = emptySet(),
+    label: String = ""
 ) {
     val textMeasurer = rememberTextMeasurer()
 
@@ -56,8 +65,8 @@ fun BitGrid(
         }
     ) {
         when (layout) {
-            BitGridLayout.GRID_8X8 -> drawBitGrid8x8(bits, labels, textMeasurer)
-            BitGridLayout.BAR_1X64 -> drawBitGrid1x64(bits, labels, textMeasurer)
+            BitGridLayout.GRID_8X8 -> drawBitGrid8x8(bits, labels, textMeasurer, highlights)
+            BitGridLayout.BAR_1X64 -> drawBitGrid1x64(bits, labels, textMeasurer, highlights, label)
         }
     }
 }
@@ -65,7 +74,8 @@ fun BitGrid(
 private fun DrawScope.drawBitGrid8x8(
     bits: List<Boolean>,
     labels: List<String>?,
-    textMeasurer: TextMeasurer
+    textMeasurer: TextMeasurer,
+    highlights: Set<Int>
 ) {
     val cellSize = size.width / 8f
     val gap = 2.dp.toPx()
@@ -101,29 +111,112 @@ private fun DrawScope.drawBitGrid8x8(
                 y + (actualCell - textLayout.size.height) / 2
             )
         )
+
+        // L2 高亮边框（琥珀色 2dp）
+        if (i in highlights) {
+            drawRect(
+                color = TerminalAmber,
+                topLeft = Offset(x - 1.dp.toPx(), y - 1.dp.toPx()),
+                size = Size(actualCell + 2.dp.toPx(), actualCell + 2.dp.toPx()),
+                style = Stroke(width = 2.dp.toPx())
+            )
+        }
     }
 }
 
 private fun DrawScope.drawBitGrid1x64(
     bits: List<Boolean>,
     labels: List<String>?,
-    textMeasurer: TextMeasurer
+    textMeasurer: TextMeasurer,
+    highlights: Set<Int>,
+    label: String
 ) {
+    val showIeee754 = label.contains("IEEE 754", ignoreCase = true) || label.contains("DOUBLE", ignoreCase = true)
+    val topPadding = if (showIeee754 || highlights.isNotEmpty()) 18.dp.toPx() else 0f
+
     val cellWidth = size.width / 64f
     val gap = 1.dp.toPx()
     val actualWidth = cellWidth - gap
-    val height = size.height
+    val height = size.height - topPadding
+
+    // IEEE 754 分区标注
+    if (showIeee754) {
+        drawIeee754Labels(cellWidth, topPadding, textMeasurer)
+    }
 
     for (i in 0 until 64) {
         val x = i * cellWidth + gap / 2
+        val y = topPadding
         val bit = bits.getOrElse(i) { false }
 
         drawRect(
             color = if (bit) TerminalGreen else Color(0xFF1F1F1F),
-            topLeft = Offset(x, 0f),
+            topLeft = Offset(x, y),
             size = Size(actualWidth, height)
         )
+
+        // L2 高亮三角形标记（琥珀色）
+        if (i in highlights) {
+            val triCenterX = x + actualWidth / 2
+            val triTop = topPadding - 8.dp.toPx()
+            val triTip = topPadding - 1.dp.toPx()
+            val halfW = 5.dp.toPx()
+            val triangle = Path().apply {
+                moveTo(triCenterX, triTip)
+                lineTo(triCenterX - halfW, triTop)
+                lineTo(triCenterX + halfW, triTop)
+                close()
+            }
+            drawPath(
+                path = triangle,
+                color = TerminalAmber
+            )
+        }
     }
+}
+
+private fun DrawScope.drawIeee754Labels(
+    cellWidth: Float,
+    topPadding: Float,
+    textMeasurer: TextMeasurer
+) {
+    // Sign: bit 0 (1 bit)
+    val signCenter = cellWidth * 0.5f
+    val signLayout = textMeasurer.measure(
+        "S",
+        TextStyle(color = TerminalAmber, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+    )
+    drawText(signLayout, topLeft = Offset(signCenter - signLayout.size.width / 2, 0f))
+
+    // Exponent: bits 1..11 (11 bits)
+    val expCenter = cellWidth * 1 + cellWidth * 11 / 2f
+    val expLayout = textMeasurer.measure(
+        "E×11",
+        TextStyle(color = SkyBlue, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+    )
+    drawText(expLayout, topLeft = Offset(expCenter - expLayout.size.width / 2, 0f))
+
+    // Mantissa: bits 12..63 (52 bits)
+    val mantCenter = cellWidth * 12 + cellWidth * 52 / 2f
+    val mantLayout = textMeasurer.measure(
+        "M×52",
+        TextStyle(color = TerminalGreen, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+    )
+    drawText(mantLayout, topLeft = Offset(mantCenter - mantLayout.size.width / 2, 0f))
+
+    // 底部分隔线提示
+    drawLine(
+        color = TerminalAmber.copy(alpha = 0.5f),
+        start = Offset(cellWidth, topPadding - 2.dp.toPx()),
+        end = Offset(cellWidth, topPadding),
+        strokeWidth = 1.dp.toPx()
+    )
+    drawLine(
+        color = SkyBlue.copy(alpha = 0.5f),
+        start = Offset(cellWidth * 12, topPadding - 2.dp.toPx()),
+        end = Offset(cellWidth * 12, topPadding),
+        strokeWidth = 1.dp.toPx()
+    )
 }
 
 @Preview(showBackground = true, backgroundColor = 0xFF0A0A0A)
@@ -134,5 +227,36 @@ private fun BitGridPreview() {
             List(64) { i -> i % 3 == 0 || i == 63 }
         }
         BitGrid(bits = bits)
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF0A0A0A)
+@Composable
+private fun BitGridBarPreview() {
+    CalcoreTheme {
+        val bits = remember {
+            List(64) { i -> i % 5 == 0 || i > 60 }
+        }
+        BitGrid(
+            bits = bits,
+            layout = BitGridLayout.BAR_1X64,
+            highlights = setOf(0, 11, 12, 63),
+            label = "IEEE 754 DOUBLE"
+        )
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF0A0A0A)
+@Composable
+private fun BitGridHighlightsPreview() {
+    CalcoreTheme {
+        val bits = remember {
+            List(64) { i -> i % 4 == 0 }
+        }
+        BitGrid(
+            bits = bits,
+            layout = BitGridLayout.GRID_8X8,
+            highlights = setOf(0, 1, 2, 63)
+        )
     }
 }

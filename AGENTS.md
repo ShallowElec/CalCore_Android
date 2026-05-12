@@ -12,7 +12,7 @@
 
 - **Slogan**: "See the math. See the machine."
 - **平台策略**: 平台无关核心引擎 + 原生 UI 层（Android 为首）。
-- **当前阶段**: 架构设计 → Android 首版实现（不写代码，先对齐设计）。
+- **当前阶段**: M1-M7a 已完成实现，M7b-M9 待开发。
 
 ---
 
@@ -112,8 +112,9 @@ class ThemeDataStore @Inject constructor(
 | 场景 | 技术方案 | 理由 |
 |---|---|---|
 | UI 层动画（按钮、切换、滑块） | Compose Animation API (`animate*AsState`, `AnimatedVisibility`, `Animatable`) | 声明式、与 Compose 生命周期集成 |
-| 2D 可视化动画（位格翻转、数据流、链表） | **Compose Canvas** + 自定义 `DrawScope` | 足够处理中等复杂度的 2D 矢量动画 |
+| 2D 可视化动画（位格翻转、数据流、链表） | **Compose Canvas** + 自定义 `DrawScope` | 足够处理中等复杂度的 2D 矢量动画；PUSH/POP 滑动、连线生长、光标平滑移动均已验证 |
 | 2D 图形渲染（函数图像、坐标系） | **Compose Canvas** + 手动路径/采样 | 与 UI 层无缝集成，支持参数驱动 |
+| 数学工作台 Canvas（坐标系/矩阵/ODE） | **Compose Canvas** + `clipToBounds()` + `detectTransformGestures` | 手势支持（平移/缩放/双击回正）+ 裁剪防止溢出 |
 | 3D 曲面/流形渲染 | **OpenGL ES 3.2** + `GLSurfaceView` / `TextureView` | 10k+ 顶点、60 FPS 必需脱离主线程 |
 | GPU Shader 效果（后处理、LIC） | **AGSL** (API 33+) + `RuntimeShader` | 仅用于增强效果，兜底 GLES fragment shader |
 | 高性能离屏渲染 | **Surface** + 独立渲染线程 | 视频导出、复杂场景预渲染 |
@@ -195,6 +196,11 @@ com.cloveriris.calcore
 - **Modifier 顺序**: `Modifier.fillMaxSize().padding().then(custom)`，遵循官方推荐顺序。
 - **重组优化**: 大数据列表用 `LazyColumn` + `key`；动画状态用 `remember { Animatable() }` 而非 `rememberSaveable`。
 - **字符串资源**: 所有用户可见文本抽取至 `strings.xml`，支持多语言预留。
+- **Canvas 动画性能**: 
+  - 使用 `rememberTextMeasurer()` 缓存文本测量器，避免每帧重建。
+  - 滑动/生长动画优先使用 `Animatable` 在 `DrawScope` 内插值，而非触发 Compose 重组。
+  - 需要裁剪的 Canvas 必须加 `.clipToBounds()`，防止绘制溢出到相邻 UI。
+  - 复杂动画组件（如 `LinkedListView`）使用独立 Canvas Overlay 层，与基础 UI 分离以减少重组范围。
 
 ### 4.3 颜色与主题
 
@@ -216,22 +222,25 @@ com.cloveriris.calcore
 | 2026-05-12 | OpenGL ES 3.2 | 3D 图形 60 FPS 必需 | Vulkan / AGSL only | GLES 为主，AGSL 增强 |
 | 2026-05-12 | MVI 单向流 | 计算器状态复杂，需可预测 | MVVM 双向绑定 | MVI |
 | 2026-05-12 | Compose Canvas 2D | 2D 可视化与 UI 同层，降低复杂度 | Skia 原生 / OpenGL 全量 | Canvas 2D + GLES 3D |
+| 2026-05-12 | 可视化引擎 `AnimationScript` | 需要按时间回放、可 scrub 的动画系统 | 每帧直接修改状态 | `TimedAction` + `reduceAction` 累积式状态归约 |
+| 2026-05-12 | Architecture 丰富模型 | 多架构切换需要栈方向、SP 名、寻址方式、助记符差异 | 仅寄存器名不同 | 完整 Architecture enum（SP/FP/addressingMode/mnemonic） |
+| 2026-05-12 | 动画速度 200ms/tick | PRD 要求 0.2s 基准，可配置 0.2x~2.0x | 固定 40 步硬编码 | `baseStepIntervalMs=200L` + `playbackSpeed` 乘数 |
 
 ---
 
 ## 6. 里程碑对接 (PRD M1-M9)
 
-| 里程碑 | Android 端重点 | 预估迭代 |
+| 里程碑 | Android 端重点 | 状态 |
 |---|---|---|
-| M1 内核 | 引擎 Kotlin 实现（纯 Kotlin，无平台依赖） | 2-3 周 |
-| M2 骨架 | Canvas 方块系统、连线系统、基础时间轴控件 | 2 周 |
-| M3 链路 | 按键 → 内存 → ALU → 结果的 Compose Canvas 动画 | 2 周 |
-| M4 硬核 | 程序员模式 + 架构切换 UI + 位运算可视化 | 2 周 |
-| M5 图形基座 | 2D 坐标系 Canvas、表达式列表、显函数渲染 | 3 周 |
-| M6 图形进阶 | OpenGL ES 3D 渲染器、参数曲面、隐函数 | 3-4 周 |
-| M7 计算可视化 | AST 生长动画、采样过程 Canvas 演示 | 2 周 |
-| M8 参数动画 | 滑块系统、关键帧、视频导出 (MediaCodec) | 3 周 |
-| M9 抛光 | 性能调优、Material You 动态色精细化、无障碍 | 2 周 |
+| M1 内核 | 引擎 Kotlin 实现（Lexer/Parser/AST/Evaluator、64-bit 计算） | ✅ 完成 |
+| M2 骨架 | Canvas 方块系统、连线系统、基础时间轴控件 | ✅ 完成 |
+| M3 链路 | 按键 → 内存 → ALU → 结果的 Compose Canvas 动画（L1-L8） | ✅ 完成 |
+| M4 硬核 | 程序员模式 + 架构切换 UI + 位运算可视化 + 动画速度控制 | ✅ 完成 |
+| M5 图形基座 | 2D 坐标系 Canvas、表达式列表、显函数/参数/极坐标渲染 | ✅ 完成 |
+| M6 图形进阶 | OpenGL ES 3D 渲染器、参数曲面、隐函数 | ⏳ M6a 完成（矩阵/微积分骨架），M6b 3D 待实现 |
+| M7 计算可视化 | AST 生长动画、采样过程 Canvas 演示、ODE 求解可视化 | ✅ M7a 完成（ODE 工作台），M7b PDE 待实现 |
+| M8 参数动画 | 滑块系统、关键帧、视频导出 (MediaCodec) | ⏳ 待实现 |
+| M9 抛光 | 性能调优、Material You 动态色精细化、无障碍 | ⏳ 待实现 |
 
 ---
 
@@ -245,6 +254,6 @@ com.cloveriris.calcore
 
 ---
 
-*文档版本: v1.0*  
+*文档版本: v1.1*  
 *日期: 2026-05-12*  
-*状态: 设计冻结（待讨论）*
+*状态: M1-M7a 实现完成，M7b-M9 待开发*

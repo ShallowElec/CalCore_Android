@@ -1,11 +1,16 @@
 package com.cloveriris.calcore.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import com.cloveriris.calcore.presentation.visualization.VisualizationViewModel
 import com.cloveriris.calcore.ui.calculator.CalculatorScreen
 import com.cloveriris.calcore.ui.calculus.CalculusScreen
 import com.cloveriris.calcore.ui.diffeq.DifferentialEquationsScreen
@@ -76,10 +81,21 @@ fun CalcoreNavHost(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-        composable(CalcoreDestinations.SETTINGS) {
+        composable(CalcoreDestinations.SETTINGS) { backStackEntry ->
+            // 共享 Calculator 目的地的 VisualizationViewModel，确保设置与计算器使用同一实例
+            val parentEntry = remember(backStackEntry) {
+                navController.getBackStackEntry(CalcoreDestinations.CALCULATOR)
+            }
+            val visualizationViewModel: VisualizationViewModel = hiltViewModel(parentEntry)
+            val visState by visualizationViewModel.uiState.collectAsStateWithLifecycle()
+
             SettingsScreen(
                 currentTheme = currentTheme,
                 onThemeChange = onThemeChange,
+                currentArchitecture = visState.architecture,
+                onArchitectureChange = visualizationViewModel::setArchitecture,
+                playbackSpeed = visState.playbackSpeed,
+                onSpeedChange = visualizationViewModel::setPlaybackSpeed,
                 onNavigateBack = { navController.popBackStack() }
             )
         }

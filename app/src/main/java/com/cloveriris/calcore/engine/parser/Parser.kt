@@ -106,6 +106,10 @@ class Parser(private val tokens: List<Token>) {
                 advance()
                 Expression.ConstantRef(token.literal, token.value)
             }
+            is Token.Variable -> {
+                advance()
+                Expression.VariableRef(token.literal)
+            }
             is Token.Function -> {
                 advance()
                 if (currentToken is Token.LParen) {
