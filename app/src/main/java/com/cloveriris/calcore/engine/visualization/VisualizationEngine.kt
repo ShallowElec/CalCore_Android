@@ -5,6 +5,7 @@ import com.cloveriris.calcore.domain.model.AnimationEvent
 import com.cloveriris.calcore.domain.model.AnimationScript
 import com.cloveriris.calcore.domain.model.Architecture
 import com.cloveriris.calcore.domain.model.MemoryOpType
+import com.cloveriris.calcore.domain.model.PipelinePhase
 import com.cloveriris.calcore.domain.model.TimedAction
 import com.cloveriris.calcore.domain.usecase.EvaluateUseCase
 import com.cloveriris.calcore.engine.parser.BinaryOperator
@@ -164,70 +165,186 @@ object VisualizationEngine {
         val op = extractMainOperator(expression) ?: "ADD"
         val spName = arch.spRegisterName
 
-        actions += TimedAction(0, AnimationAction.UpdateDescription("计算结果: $result"))
+        // 提取操作数（用于分阶段展示）
+        val (leftVal, rightVal) = extractOperands(ast, result)
+        val leftBits = longToBits(leftVal.toRawBits())
+        val rightBits = longToBits(rightVal.toRawBits())
 
-        // T0: AST 完全生长 + 指令流水线全激活
-        actions += TimedAction(0, AnimationAction.UpdateAstGrowth(ast, progress = 1.0f))
-        actions += TimedAction(0, AnimationAction.UpdateInstructionPipeline(
-            listOf(
-                AnimationAction.PipelineStageData("FETCH", mnemonic(arch, "EVAL"), isActive = true, progress = 1.0f),
-                AnimationAction.PipelineStageData("DECODE", op.lowercase(), isActive = true, progress = 1.0f),
-                AnimationAction.PipelineStageData("EXECUTE", "", isActive = true, progress = 1.0f),
-                AnimationAction.PipelineStageData("WRITEBACK", "", isActive = true, progress = 1.0f)
-            )
-        ))
+        // ========== PHASE 1: INPUT / NUMERIC (L1-L2) T0-T3 ==========
+        actions += TimedAction(0, AnimationAction.UpdateDescription("计算: $expression = $result"))
+        actions += TimedAction(0, AnimationAction.EnterPhase(PipelinePhase.PHASE_INPUT, phaseDurationMs = 800L))
 
-        // T1: ALU 运算激活
-        actions += TimedAction(1, AnimationAction.UpdateAluOperation(op, 0L, 0L, result.toLong(), isActive = true))
-
-        // T2: 位格展示 IEEE 754 结果 + 高亮
-        actions += TimedAction(2, AnimationAction.UpdateBitGrid(bits, "IEEE 754 DOUBLE = $result"))
-        actions += TimedAction(2, AnimationAction.UpdateBitGridHighlights(
+        // T0: 左操作数位格亮起
+        actions += TimedAction(0, AnimationAction.UpdateBitGrid(leftBits, "LEFT OPERAND = $leftVal"))
+        actions += TimedAction(1, AnimationAction.UpdateBitGridHighlights(
             highlightIndices = buildSet {
-                add(63) // sign bit
-                addAll(52..62) // exponent
-                addAll(0..51) // mantissa
+                add(63); addAll(52..62); addAll(0..51)
             },
             highlightColor = 0xFFFFA657.toInt()
         ))
 
-        // T3: 数据路径 ALU → RAX
-        actions += TimedAction(3, AnimationAction.UpdateDataPath("ALU", arch.registerNames[0], progress = 1.0f))
+        // T2: 右操作数位格亮起
+        actions += TimedAction(2, AnimationAction.UpdateBitGrid(rightBits, "RIGHT OPERAND = $rightVal"))
 
-        // T4: 结果写入寄存器 + 内存
-        actions += TimedAction(4, AnimationAction.UpdateRegister(0, result.toLong(), isHighlighted = true))
-        actions += TimedAction(4, AnimationAction.WriteMemory(0x1002, rawBits.toByte(), isAllocated = true, isPointer = false, isWriting = true))
-
-        // T5: 栈帧 POP（计算完成，栈收缩）
-        actions += TimedAction(5, AnimationAction.UpdateStackAnimation(
-            operation = AnimationAction.StackOperationType.POP,
-            progress = 0.5f,
-            frameLabel = "result",
-            frameValue = result.toLong().toString(),
-            registerName = spName
+        // T3: 退出输入阶段
+        actions += TimedAction(3, AnimationAction.ExitPhase(
+            PipelinePhase.PHASE_INPUT,
+            "L1-L2: $leftVal, $rightVal loaded"
         ))
-        actions += TimedAction(5, AnimationAction.UpdateStackPointer(spName, isHighlighted = true))
 
-        // T6: POP 完成，移除栈帧
-        actions += TimedAction(6, AnimationAction.PopStack)
-        actions += TimedAction(6, AnimationAction.UpdateStackAnimation(
-            operation = AnimationAction.StackOperationType.POP,
-            progress = 1.0f,
-            frameLabel = "result",
-            frameValue = result.toLong().toString(),
-            registerName = spName
+        // ========== PHASE 2: REGISTERS (L3) T4-T7 ==========
+        actions += TimedAction(4, AnimationAction.EnterPhase(PipelinePhase.PHASE_REGISTERS, phaseDurationMs = 800L))
+
+        // T4: RAX 装载左操作数
+        actions += TimedAction(4, AnimationAction.UpdateRegister(0, leftVal.toLong(), isHighlighted = true))
+        actions += TimedAction(4, AnimationAction.UpdateDataPath("KEYBOARD", arch.registerNames[0], progress = 0.5f))
+
+        // T5: RBX 装载右操作数
+        actions += TimedAction(5, AnimationAction.UpdateRegister(1, rightVal.toLong(), isHighlighted = true))
+        actions += TimedAction(5, AnimationAction.UpdateDataPath("KEYBOARD", arch.registerNames[1], progress = 0.5f))
+
+        // T6: 数据路径 RAX→ALU, RBX→ALU
+        actions += TimedAction(6, AnimationAction.UpdateDataPath(arch.registerNames[0], "ALU", progress = 0.7f))
+        actions += TimedAction(6, AnimationAction.UpdateDataPath(arch.registerNames[1], "ALU", progress = 0.7f))
+        actions += TimedAction(6, AnimationAction.UpdateAluOperation(op, leftVal.toLong(), rightVal.toLong(), result.toLong(), isActive = false))
+
+        // T7: 退出寄存器阶段，ALU 待机
+        actions += TimedAction(7, AnimationAction.ExitPhase(
+            PipelinePhase.PHASE_REGISTERS,
+            "L3: ${arch.registerNames[0]}←$leftVal, ${arch.registerNames[1]}←$rightVal"
         ))
-        actions += TimedAction(6, AnimationAction.UpdateStackPointer(spName, isHighlighted = false))
 
-        // T7: 结果数据流 → 显示
-        actions += TimedAction(7, AnimationAction.UpdateResultFlow("REGISTER", "DISPLAY", progress = 1.0f))
-        actions += TimedAction(7, AnimationAction.UpdateDisplayBuffer(result.toString(), result.toString().length, isTyping = false))
-        actions += TimedAction(7, AnimationAction.WriteMemory(0x1002, rawBits.toByte(), isAllocated = true, isPointer = false, isWriting = false))
+        // ========== PHASE 3: MEMORY (L4) T8-T11 ==========
+        actions += TimedAction(8, AnimationAction.EnterPhase(PipelinePhase.PHASE_MEMORY, phaseDurationMs = 800L))
 
-        // T8: 寄存器取消高亮
-        actions += TimedAction(8, AnimationAction.UpdateRegister(0, result.toLong(), isHighlighted = false))
+        // T8: 内存写入左操作数 + 栈 PUSH
+        actions += TimedAction(8, AnimationAction.WriteMemory(0x1000, leftVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = true))
+        actions += TimedAction(8, AnimationAction.PushStack("left=$leftVal", "0x1000"))
+        actions += TimedAction(8, AnimationAction.UpdateStackAnimation(
+            operation = AnimationAction.StackOperationType.PUSH,
+            progress = 0.5f, frameLabel = "left=$leftVal", frameValue = "0x1000", registerName = spName
+        ))
+        actions += TimedAction(8, AnimationAction.UpdateStackPointer("$spName-0x08", isHighlighted = true))
 
-        val total = 10L
+        // T9: 内存写入右操作数 + 栈 PUSH
+        actions += TimedAction(9, AnimationAction.WriteMemory(0x1008, rightVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = true))
+        actions += TimedAction(9, AnimationAction.PushStack("right=$rightVal", "0x1008"))
+        actions += TimedAction(9, AnimationAction.UpdateStackAnimation(
+            operation = AnimationAction.StackOperationType.PUSH,
+            progress = 1.0f, frameLabel = "right=$rightVal", frameValue = "0x1008", registerName = spName
+        ))
+        actions += TimedAction(9, AnimationAction.UpdateStackPointer("$spName-0x10", isHighlighted = false))
+
+        // T10: 内存指针生长动画
+        actions += TimedAction(10, AnimationAction.AnimateMemoryPointer(0x1000, 0x1008, progress = 0.6f))
+        actions += TimedAction(10, AnimationAction.WriteMemory(0x1000, leftVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = false))
+        actions += TimedAction(10, AnimationAction.WriteMemory(0x1008, rightVal.toRawBits().toByte(), isAllocated = true, isPointer = false, isWriting = false))
+
+        // T11: 退出内存阶段
+        actions += TimedAction(11, AnimationAction.ExitPhase(
+            PipelinePhase.PHASE_MEMORY,
+            "L4: mem[0x1000]=$leftVal, mem[0x1008]=$rightVal, stack pushed"
+        ))
+
+        // ========== PHASE 4: PARSE (L5) T12-T16 ==========
+        actions += TimedAction(12, AnimationAction.EnterPhase(PipelinePhase.PHASE_PARSE, phaseDurationMs = 1000L))
+
+        // T12: AST 根节点出现
+        actions += TimedAction(12, AnimationAction.UpdateAstGrowth(ast, progress = 0.2f))
+        actions += TimedAction(12, AnimationAction.UpdateOperatorStack(emptyList(), pushLabel = null, popCount = 0))
+
+        // T13: AST 左子节点生长 + 运算符栈 push 左操作数
+        actions += TimedAction(13, AnimationAction.UpdateAstGrowth(ast, progress = 0.5f))
+        actions += TimedAction(13, AnimationAction.UpdateOperatorStack(listOf(leftVal.toString())))
+
+        // T14: AST 右子节点生长 + 运算符栈 push 运算符
+        actions += TimedAction(14, AnimationAction.UpdateAstGrowth(ast, progress = 0.8f))
+        actions += TimedAction(14, AnimationAction.UpdateOperatorStack(listOf(leftVal.toString(), op)))
+
+        // T15: AST 完全生长 + 运算符栈完整 + 链表节点插入
+        actions += TimedAction(15, AnimationAction.UpdateAstGrowth(ast, progress = 1.0f))
+        actions += TimedAction(15, AnimationAction.UpdateOperatorStack(listOf(leftVal.toString(), op, rightVal.toString())))
+        actions += TimedAction(15, AnimationAction.UpdateLinkedList(listOf(
+            AnimationAction.LinkedListNodeData("n1", leftVal.toString(), "n2", isNew = true),
+            AnimationAction.LinkedListNodeData("n2", op, "n3", isNew = true),
+            AnimationAction.LinkedListNodeData("n3", rightVal.toString(), null, isNew = true)
+        )))
+        actions += TimedAction(15, AnimationAction.AnimateLinkedListWire("n1", "n2", progress = 0.7f))
+        actions += TimedAction(15, AnimationAction.AnimateLinkedListWire("n2", "n3", progress = 0.7f))
+
+        // T16: 退出解析阶段
+        actions += TimedAction(16, AnimationAction.ExitPhase(
+            PipelinePhase.PHASE_PARSE,
+            "L5: AST built, op-stack [$leftVal, $op, $rightVal]"
+        ))
+
+        // ========== PHASE 5: EXECUTE (L6-L7) T17-T20 ==========
+        actions += TimedAction(17, AnimationAction.EnterPhase(PipelinePhase.PHASE_EXECUTE, phaseDurationMs = 800L))
+
+        // T17: 地址总线拼接
+        actions += TimedAction(17, AnimationAction.UpdateAddressBus(
+            segment = 0x0007L, offset = 0x1000L,
+            fullAddress = 0x0007_1000L, progress = 0.5f
+        ))
+        actions += TimedAction(17, AnimationAction.UpdateInstructionPipeline(listOf(
+            AnimationAction.PipelineStageData("FETCH", mnemonic(arch, "EVAL"), isActive = true, progress = 1.0f),
+            AnimationAction.PipelineStageData("DECODE", op.lowercase(), isActive = false, progress = 0f),
+            AnimationAction.PipelineStageData("EXECUTE", "", isActive = false, progress = 0f),
+            AnimationAction.PipelineStageData("WRITEBACK", "", isActive = false, progress = 0f)
+        )))
+
+        // T18: 指令流水线 DECODE→EXECUTE 激活
+        actions += TimedAction(18, AnimationAction.UpdateInstructionPipeline(listOf(
+            AnimationAction.PipelineStageData("FETCH", mnemonic(arch, "EVAL"), isActive = true, progress = 1.0f),
+            AnimationAction.PipelineStageData("DECODE", op.lowercase(), isActive = true, progress = 1.0f),
+            AnimationAction.PipelineStageData("EXECUTE", "", isActive = true, progress = 0.5f),
+            AnimationAction.PipelineStageData("WRITEBACK", "", isActive = false, progress = 0f)
+        )))
+        actions += TimedAction(18, AnimationAction.UpdateAddressBus(
+            segment = 0x0007L, offset = 0x1000L,
+            fullAddress = 0x0007_1000L, progress = 1.0f
+        ))
+
+        // T19: ALU 运算脉冲 + WRITEBACK
+        actions += TimedAction(19, AnimationAction.UpdateAluOperation(op, leftVal.toLong(), rightVal.toLong(), result.toLong(), isActive = true))
+        actions += TimedAction(19, AnimationAction.UpdateInstructionPipeline(listOf(
+            AnimationAction.PipelineStageData("FETCH", mnemonic(arch, "EVAL"), isActive = true, progress = 1.0f),
+            AnimationAction.PipelineStageData("DECODE", op.lowercase(), isActive = true, progress = 1.0f),
+            AnimationAction.PipelineStageData("EXECUTE", "", isActive = true, progress = 1.0f),
+            AnimationAction.PipelineStageData("WRITEBACK", "", isActive = true, progress = 1.0f)
+        )))
+
+        // T20: 退出执行阶段
+        actions += TimedAction(20, AnimationAction.ExitPhase(
+            PipelinePhase.PHASE_EXECUTE,
+            "L6-L7: $op executed, result=$result"
+        ))
+
+        // ========== PHASE 6: OUTPUT (L8) T21-T24 ==========
+        actions += TimedAction(21, AnimationAction.EnterPhase(PipelinePhase.PHASE_OUTPUT, phaseDurationMs = 800L))
+
+        // T21: 结果位格 + 数据路径 ALU→RAX
+        actions += TimedAction(21, AnimationAction.UpdateBitGrid(bits, "RESULT IEEE 754 = $result"))
+        actions += TimedAction(21, AnimationAction.UpdateDataPath("ALU", arch.registerNames[0], progress = 0.5f))
+        actions += TimedAction(21, AnimationAction.UpdateRegister(0, result.toLong(), isHighlighted = true))
+
+        // T22: 数据路径 RAX→MEMORY→DISPLAY
+        actions += TimedAction(22, AnimationAction.UpdateDataPath(arch.registerNames[0], "MEM", progress = 0.7f))
+        actions += TimedAction(22, AnimationAction.WriteMemory(0x1002, rawBits.toByte(), isAllocated = true, isPointer = false, isWriting = true))
+
+        // T23: 显示缓冲区更新
+        actions += TimedAction(23, AnimationAction.UpdateResultFlow("REGISTER", "DISPLAY", progress = 1.0f))
+        actions += TimedAction(23, AnimationAction.UpdateDisplayBuffer(result.toString(), result.toString().length, isTyping = false))
+        actions += TimedAction(23, AnimationAction.WriteMemory(0x1002, rawBits.toByte(), isAllocated = true, isPointer = false, isWriting = false))
+
+        // T24: 寄存器取消高亮，退出输出阶段
+        actions += TimedAction(24, AnimationAction.UpdateRegister(0, result.toLong(), isHighlighted = false))
+        actions += TimedAction(24, AnimationAction.ExitPhase(
+            PipelinePhase.PHASE_OUTPUT,
+            "L8: result displayed"
+        ))
+
+        val total = 25L
         actions += TimedAction(total, AnimationAction.SetDuration(total))
         return AnimationScript(actions, total)
     }
@@ -237,6 +354,10 @@ object VisualizationEngine {
 
         actions += TimedAction(0, AnimationAction.UpdateDescription("清除"))
         actions += TimedAction(0, AnimationAction.ClearAll)
+        // 重置所有阶段状态
+        PipelinePhase.orderedValues().reversed().forEach { phase ->
+            actions += TimedAction(0, AnimationAction.ExitPhase(phase, ""))
+        }
         actions += TimedAction(1, AnimationAction.UpdateBitGrid(List(64) { false }, "CLEARED"))
         actions += TimedAction(2, AnimationAction.UpdateDisplayBuffer("", 0, isTyping = false))
         actions += TimedAction(3, AnimationAction.UpdateOperatorStack(emptyList()))
@@ -373,6 +494,39 @@ object VisualizationEngine {
 
     private fun longToBits(value: Long): List<Boolean> {
         return List(64) { i -> ((value shr i) and 1L) == 1L }
+    }
+
+    /**
+     * 从 AST 提取左右操作数。
+     * 对于二元表达式，提取 left 和 right 的数值；
+     * 对于非二元表达式，使用 result/2 和 result/2 作为默认值。
+     */
+    private fun extractOperands(ast: Expression?, result: Double): Pair<Double, Double> {
+        return when (ast) {
+            is Expression.Binary -> {
+                val left = evaluateLiteral(ast.left)
+                val right = evaluateLiteral(ast.right)
+                Pair(left, right)
+            }
+            is Expression.Unary -> {
+                val operand = evaluateLiteral(ast.operand)
+                Pair(0.0, operand)
+            }
+            else -> {
+                // 无法解析，用结果拆分作为示意
+                Pair(result / 2.0, result / 2.0)
+            }
+        }
+    }
+
+    private fun evaluateLiteral(expr: Expression?): Double {
+        return when (expr) {
+            is Expression.NumberLiteral -> expr.value
+            is Expression.ConstantRef -> expr.value
+            is Expression.Binary -> evaluateLiteral(expr.left) // 简化处理
+            is Expression.Unary -> evaluateLiteral(expr.operand)
+            else -> 0.0
+        }
     }
 
     private fun extractOperators(expression: String): List<String> {

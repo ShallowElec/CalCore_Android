@@ -35,11 +35,13 @@ import com.cloveriris.calcore.ui.theme.TerminalGray
  * 内存网格可视化（L4 内存布局 + L6 指针寻址）
  *
  * 特性：
+ * - 固定 8×4 网格（32 单元格），像 hexdump -C 的秩序感
+ * - 地址标签左置，等宽对齐
  * - 绿色实心方块：已分配的内存单元 / 实际数据
- * - 绿色空心方块：指针、引用、空闲槽位、预分配但未写入的地址
- * - 光标读取头：黄色高亮边框 + 顶部箭头，随光标移动平滑过渡
- * - 指针连线生长：指针赋值时虚线箭头从源地址“生长”到目标地址
- * - 写入脉冲：正在写入的单元格闪烁白色
+ * - 绿色空心方块：指针、引用、空闲槽位
+ * - 未分配：仅显示极细网格线，无填充
+ * - 写入脉冲：白色闪光→渐绿→稳定
+ * - 光标读取头：黄色高亮边框 + 顶部箭头，移动时有拖尾
  */
 data class MemoryCellVisual(
     val address: String,
@@ -60,7 +62,8 @@ fun MemoryGrid(
     pointerAnimation: MemoryPointerAnimationState = MemoryPointerAnimationState()
 ) {
     val textMeasurer = rememberTextMeasurer()
-    val rows = (cells.size + columns - 1) / columns
+    // 固定行数：至少 4 行，形成稳定的内存 dump 视图
+    val rows = 4.coerceAtLeast((cells.size + columns - 1) / columns)
 
     // 光标平滑移动动画
     val cursorAnim = remember(cursorAddress) { Animatable(0f) }
@@ -69,56 +72,74 @@ fun MemoryGrid(
         cursorAnim.animateTo(1f, tween(250))
     }
 
-    // 写入脉冲动画
+    // 写入脉冲动画（白色闪光→绿色）
     val writePulse = remember(cells.filter { it.isWriting }.hashCode()) { Animatable(0f) }
     LaunchedEffect(cells.filter { it.isWriting }.hashCode()) {
         writePulse.snapTo(0f)
-        writePulse.animateTo(1f, tween(400))
+        writePulse.animateTo(1f, tween(500))
     }
 
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .height((rows * 32 + 24).dp)
+            .height((rows * 32 + 28).dp)
             .padding(8.dp)
     ) {
-        val cellWidth = size.width / columns
+        val addrColWidth = 52.dp.toPx()
+        val cellWidth = (size.width - addrColWidth) / columns
         val cellHeight = 28.dp.toPx()
         val gap = 2.dp.toPx()
 
-        // 计算当前光标索引
+        // 绘制网格背景线（所有单元格的基础网格）
+        drawBaseGrid(rows, columns, addrColWidth, cellWidth, cellHeight, gap)
+
+        // 计算光标索引
         val cursorIndex = resolveCursorIndex(cells, cursorAddress)
         val prevCursorIndex = resolveCursorIndex(cells, previousCursorAddress)
 
         cells.forEachIndexed { index, cell ->
             val row = index / columns
             val col = index % columns
-            val x = col * cellWidth + gap / 2
-            val y = row * cellHeight + gap / 2 + 20.dp.toPx()
+            val x = addrColWidth + col * cellWidth + gap / 2
+            val y = row * cellHeight + gap / 2 + 18.dp.toPx()
 
             val isCursor = index == cursorIndex
             val wasCursor = index == prevCursorIndex && prevCursorIndex != cursorIndex
 
-            // 光标平滑移动：若此单元格是前一个光标位置，随动画淡出；若是当前位置，随动画淡入
+            // 光标平滑移动淡入淡出
             val cursorAlpha = when {
                 isCursor -> cursorAnim.value
                 wasCursor -> 1f - cursorAnim.value
                 else -> if (index == cursorIndex) 1f else 0f
             }
 
-            // 方块颜色语义
+            // 方块填充语义
             val fillColor = when {
-                cell.isPointer -> Color.Transparent // 空心 = 指针/空闲
-                cell.isAllocated -> TerminalGreen   // 实心 = 已分配数据
-                else -> Color(0xFF1F1F1F)
+                !cell.isAllocated -> Color.Transparent
+                cell.isPointer -> Color.Transparent
+                else -> TerminalGreen
             }
 
-            // 绘制方块
-            drawRect(
-                color = fillColor,
-                topLeft = Offset(x, y),
-                size = Size(cellWidth - gap, cellHeight - gap)
-            )
+            // 写入脉冲：先白色闪光，再渐绿
+            val writeGlowAlpha = if (cell.isWriting) {
+                val p = writePulse.value
+                when {
+                    p < 0.3f -> 1f - p / 0.3f  // 白色闪光峰值
+                    p < 0.7f -> (p - 0.3f) / 0.4f * 0.6f  // 渐绿过渡
+                    else -> 0.6f - (p - 0.7f) / 0.3f * 0.6f  // 衰减
+                }
+            } else 0f
+
+            // 绘制填充
+            if (fillColor != Color.Transparent) {
+                drawRect(
+                    color = if (cell.isWriting && writePulse.value < 0.5f)
+                        Color.White.copy(alpha = writeGlowAlpha.coerceIn(0f, 0.9f))
+                    else fillColor,
+                    topLeft = Offset(x, y),
+                    size = Size(cellWidth - gap, cellHeight - gap)
+                )
+            }
 
             // 空心方块边框（指针语义）
             if (cell.isPointer) {
@@ -126,15 +147,14 @@ fun MemoryGrid(
                     color = TerminalGreen,
                     topLeft = Offset(x, y),
                     size = Size(cellWidth - gap, cellHeight - gap),
-                    style = Stroke(width = 2.dp.toPx())
+                    style = Stroke(width = 1.5f.dp.toPx())
                 )
             }
 
-            // 写入脉冲效果（白色闪烁边框）
-            if (cell.isWriting) {
-                val pulseAlpha = (1f - writePulse.value) * 0.8f
+            // 写入脉冲边框（绿色发光）
+            if (cell.isWriting && writePulse.value > 0.3f) {
                 drawRect(
-                    color = Color.White.copy(alpha = pulseAlpha),
+                    color = TerminalGreen.copy(alpha = writeGlowAlpha * 0.8f),
                     topLeft = Offset(x - 1.dp.toPx(), y - 1.dp.toPx()),
                     size = Size(cellWidth - gap + 2.dp.toPx(), cellHeight - gap + 2.dp.toPx()),
                     style = Stroke(width = 2.dp.toPx())
@@ -146,7 +166,7 @@ fun MemoryGrid(
             val textColor = when {
                 cell.isPointer -> TerminalGreen
                 cell.isAllocated -> Color.Black
-                else -> TerminalGray
+                else -> TerminalGray.copy(alpha = 0.3f)
             }
             val valueLayout = textMeasurer.measure(
                 valueText,
@@ -160,20 +180,20 @@ fun MemoryGrid(
                 )
             )
 
-            // 地址标签（每行第一个）
+            // 地址标签（每行第一个，左置对齐）
             if (col == 0) {
                 val addrLayout = textMeasurer.measure(
                     cell.address,
-                    TextStyle(color = TerminalGray, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    TextStyle(color = TerminalGray.copy(alpha = 0.5f), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                 )
-                drawText(addrLayout, topLeft = Offset(x, y - 14.dp.toPx()))
+                drawText(addrLayout, topLeft = Offset(0f, y + (cellHeight - gap - addrLayout.size.height) / 2))
             }
 
             // 光标读取头（黄色外边框 + 顶部小三角）
             if (cursorAlpha > 0.01f) {
                 val strokeWidth = 2.dp.toPx()
                 drawRect(
-                    color = TerminalAmber.copy(alpha = cursorAlpha),
+                    color = TerminalAmber.copy(alpha = cursorAlpha * 0.8f),
                     topLeft = Offset(x - 1.dp.toPx(), y - 1.dp.toPx()),
                     size = Size(cellWidth - gap + 2.dp.toPx(), cellHeight - gap + 2.dp.toPx()),
                     style = Stroke(width = strokeWidth)
@@ -192,10 +212,25 @@ fun MemoryGrid(
             }
         }
 
+        // 光标拖尾残影（2-3 个渐淡历史位置）
+        if (prevCursorIndex >= 0 && prevCursorIndex != cursorIndex) {
+            val prow = prevCursorIndex / columns
+            val pcol = prevCursorIndex % columns
+            val px = addrColWidth + pcol * cellWidth + gap / 2
+            val py = prow * cellHeight + gap / 2 + 18.dp.toPx()
+            val tailAlpha = (1f - cursorAnim.value) * 0.3f
+            drawRect(
+                color = TerminalAmber.copy(alpha = tailAlpha),
+                topLeft = Offset(px - 1.dp.toPx(), py - 1.dp.toPx()),
+                size = Size(cellWidth - gap + 2.dp.toPx(), cellHeight - gap + 2.dp.toPx()),
+                style = Stroke(width = 1.dp.toPx())
+            )
+        }
+
         // 静态指针虚线箭头
         pointerLinks.forEach { (sourceIndex, targetIndex) ->
             if (sourceIndex !in cells.indices || targetIndex !in cells.indices) return@forEach
-            drawPointerArrow(sourceIndex, targetIndex, columns, cellWidth, cellHeight, gap, TerminalGreen.copy(alpha = 0.5f))
+            drawPointerArrow(sourceIndex, targetIndex, columns, addrColWidth, cellWidth, cellHeight, gap, TerminalGreen.copy(alpha = 0.5f))
         }
 
         // 动态指针连线生长动画
@@ -208,10 +243,28 @@ fun MemoryGrid(
             }
             if (sIdx >= 0 && tIdx >= 0) {
                 drawGrowingPointerArrow(
-                    sIdx, tIdx, columns, cellWidth, cellHeight, gap,
+                    sIdx, tIdx, columns, addrColWidth, cellWidth, cellHeight, gap,
                     TerminalGreen, pointerAnimation.progress
                 )
             }
+        }
+    }
+}
+
+private fun DrawScope.drawBaseGrid(
+    rows: Int, columns: Int,
+    addrColWidth: Float, cellWidth: Float, cellHeight: Float, gap: Float
+) {
+    for (r in 0 until rows) {
+        for (c in 0 until columns) {
+            val x = addrColWidth + c * cellWidth + gap / 2
+            val y = r * cellHeight + gap / 2 + 18.dp.toPx()
+            drawRect(
+                color = Color.Transparent,
+                topLeft = Offset(x, y),
+                size = Size(cellWidth - gap, cellHeight - gap),
+                style = Stroke(width = 0.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 2f)))
+            )
         }
     }
 }
@@ -231,7 +284,7 @@ private fun resolveCursorIndex(cells: List<MemoryCellVisual>, cursorAddress: Int
 
 private fun DrawScope.drawPointerArrow(
     sourceIndex: Int, targetIndex: Int,
-    columns: Int, cellWidth: Float, cellHeight: Float, gap: Float,
+    columns: Int, addrColWidth: Float, cellWidth: Float, cellHeight: Float, gap: Float,
     color: Color
 ) {
     val sourceRow = sourceIndex / columns
@@ -239,9 +292,9 @@ private fun DrawScope.drawPointerArrow(
     val targetRow = targetIndex / columns
     val targetCol = targetIndex % columns
 
-    val sourceX = sourceCol * cellWidth + cellWidth / 2
+    val sourceX = addrColWidth + sourceCol * cellWidth + cellWidth / 2
     val sourceY = sourceRow * cellHeight + 20.dp.toPx() + (cellHeight - gap) / 2
-    val targetX = targetCol * cellWidth + cellWidth / 2
+    val targetX = addrColWidth + targetCol * cellWidth + cellWidth / 2
     val targetY = targetRow * cellHeight + 20.dp.toPx() + (cellHeight - gap) / 2
 
     val start = Offset(sourceX, sourceY)
@@ -279,7 +332,7 @@ private fun DrawScope.drawPointerArrow(
 
 private fun DrawScope.drawGrowingPointerArrow(
     sourceIndex: Int, targetIndex: Int,
-    columns: Int, cellWidth: Float, cellHeight: Float, gap: Float,
+    columns: Int, addrColWidth: Float, cellWidth: Float, cellHeight: Float, gap: Float,
     color: Color, progress: Float
 ) {
     val sourceRow = sourceIndex / columns
@@ -287,9 +340,9 @@ private fun DrawScope.drawGrowingPointerArrow(
     val targetRow = targetIndex / columns
     val targetCol = targetIndex % columns
 
-    val sourceX = sourceCol * cellWidth + cellWidth / 2
+    val sourceX = addrColWidth + sourceCol * cellWidth + cellWidth / 2
     val sourceY = sourceRow * cellHeight + 20.dp.toPx() + (cellHeight - gap) / 2
-    val targetX = targetCol * cellWidth + cellWidth / 2
+    val targetX = addrColWidth + targetCol * cellWidth + cellWidth / 2
     val targetY = targetRow * cellHeight + 20.dp.toPx() + (cellHeight - gap) / 2
 
     val start = Offset(sourceX, sourceY)
@@ -298,7 +351,6 @@ private fun DrawScope.drawGrowingPointerArrow(
         sourceY + (targetY - sourceY) * progress
     )
 
-    // 生长中的实线
     drawLine(
         color = color,
         start = start,
@@ -306,7 +358,6 @@ private fun DrawScope.drawGrowingPointerArrow(
         strokeWidth = 2.dp.toPx()
     )
 
-    // 流光点
     if (progress > 0.3f) {
         drawCircle(
             color = Color.White.copy(alpha = 0.8f),
@@ -315,7 +366,6 @@ private fun DrawScope.drawGrowingPointerArrow(
         )
     }
 
-    // 箭头头部
     if (progress > 0.9f) {
         val dx = targetX - sourceX
         val dy = targetY - sourceY
@@ -346,7 +396,7 @@ private fun MemoryGridPreview() {
     CalcoreTheme {
         val cells = List(32) { i ->
             MemoryCellVisual(
-                address = "0x%04X".format(i * 8),
+                address = "0x%04X".format(0x1000 + i * 8),
                 value = (i * 17 % 256).toByte(),
                 isAllocated = i % 5 != 0,
                 isPointer = i % 7 == 0 && i != 0,

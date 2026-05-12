@@ -2,6 +2,7 @@ package com.cloveriris.calcore.presentation.visualization
 
 import com.cloveriris.calcore.domain.model.AnimationAction
 import com.cloveriris.calcore.domain.model.Architecture
+import com.cloveriris.calcore.domain.model.PipelinePhase
 import com.cloveriris.calcore.domain.model.VisualizationLevel
 import com.cloveriris.calcore.engine.parser.Expression
 import com.cloveriris.calcore.ui.visualization.MemoryCellVisual
@@ -116,4 +117,10 @@ data class VisualizationUiState(
     val isPlaying: Boolean = false,
     val totalDurationMs: Long = 0L,
     val currentTimeMs: Long = 0L,
+    // ===== 阶段式流水线状态 =====
+    val activePhase: PipelinePhase? = null,
+    val phaseProgress: Float = 0f,
+    val completedPhases: Set<PipelinePhase> = emptySet(),
+    val phaseSnapshots: Map<PipelinePhase, String> = emptyMap(),
+    val phaseDurations: Map<PipelinePhase, Long> = emptyMap(),
 )

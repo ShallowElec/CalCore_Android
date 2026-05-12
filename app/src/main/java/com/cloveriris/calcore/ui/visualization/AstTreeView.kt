@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -95,34 +98,60 @@ private fun AstNode(
                 scaleOut(targetScale = 0.5f, animationSpec = tween(200))
     ) {
         val isHighlighted = expression == highlightedNode
+        // 已计算的节点变暗，当前活跃节点脉冲
+        val isEvaluated = growthProgress >= 1.0f && depth > 0
         val nodeColor = when {
-            isHighlighted -> TerminalGreen.copy(alpha = 0.3f)
+            isHighlighted -> TerminalGreen.copy(alpha = 0.35f)
+            isEvaluated -> TerminalGray.copy(alpha = 0.08f)
             else -> TerminalGray.copy(alpha = 0.15f)
         }
         val textColor = when {
             isHighlighted -> TerminalGreen
+            isEvaluated -> TerminalGray.copy(alpha = 0.5f)
             else -> TerminalGray.copy(alpha = 0.9f)
         }
+        val borderColor = when {
+            isHighlighted -> TerminalGreen.copy(alpha = 0.6f)
+            else -> Color.Transparent
+        }
         val label = expressionLabel(expression)
+        // 数值气泡：叶子节点显示数值，已计算的父节点显示结果
+        val valueBubble = when (expression) {
+            is Expression.NumberLiteral -> "%.2f".format(expression.value)
+            is Expression.ConstantRef -> "%.2f".format(expression.value)
+            else -> null
+        }
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 节点标签
+            // 节点标签 + 可选数值气泡
             Box(
                 modifier = Modifier
-                    .padding(vertical = 8.dp, horizontal = 12.dp)
+                    .padding(vertical = 6.dp, horizontal = 10.dp)
                     .background(nodeColor, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .border(1.5.dp, borderColor, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = label,
-                    color = textColor,
-                    fontSize = 14.sp,
-                    fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
-                    textAlign = TextAlign.Center
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = label,
+                        color = textColor,
+                        fontSize = 13.sp,
+                        fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
+                        textAlign = TextAlign.Center
+                    )
+                    if (valueBubble != null) {
+                        Text(
+                            text = valueBubble,
+                            color = TerminalGreen.copy(alpha = 0.7f),
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
 
             // 子节点

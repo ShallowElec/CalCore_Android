@@ -53,25 +53,47 @@ fun RegisterBank(
             .padding(8.dp)
     ) {
         val rowHeight = 36.dp.toPx()
-        val nameWidth = 60.dp.toPx()
+        val nameWidth = 64.dp.toPx()
         val gap = 4.dp.toPx()
 
         registers.forEachIndexed { index, reg ->
             val y = index * rowHeight + gap
 
-            // 寄存器名背景
+            // 寄存器名背景：高亮时琥珀色脉冲，非零值时绿色细边框，零值时深灰
+            val nameBgColor = when {
+                reg.isHighlighted -> TerminalAmber.copy(alpha = 0.25f)
+                reg.value != 0L -> TerminalGreen.copy(alpha = 0.08f)
+                else -> Color(0xFF1A1A1A)
+            }
+            val nameTextColor = when {
+                reg.isHighlighted -> TerminalAmber
+                reg.value != 0L -> TerminalGreen.copy(alpha = 0.85f)
+                else -> TerminalGray.copy(alpha = 0.5f)
+            }
+            val nameBorderColor = when {
+                reg.isHighlighted -> TerminalAmber.copy(alpha = 0.6f)
+                reg.value != 0L -> TerminalGreen.copy(alpha = 0.3f)
+                else -> Color(0xFF2A2A2A)
+            }
+
             drawRect(
-                color = if (reg.isHighlighted) TerminalAmber.copy(alpha = 0.3f) else Color(0xFF1F1F1F),
+                color = nameBgColor,
                 topLeft = Offset(0f, y),
                 size = Size(nameWidth, rowHeight - gap)
+            )
+            drawRect(
+                color = nameBorderColor,
+                topLeft = Offset(0f, y),
+                size = Size(nameWidth, rowHeight - gap),
+                style = Stroke(width = if (reg.isHighlighted) 2.dp.toPx() else 1.dp.toPx())
             )
 
             // 寄存器名文字
             val nameLayout = textMeasurer.measure(
                 reg.name,
                 TextStyle(
-                    color = if (reg.isHighlighted) TerminalAmber else TerminalGray,
-                    fontSize = 12.sp,
+                    color = nameTextColor,
+                    fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace
                 )
             )
@@ -85,25 +107,47 @@ fun RegisterBank(
 
             // 64-bit 值可视化（16 个 4-bit 块）
             val hexDigits = reg.value.toString(16).uppercase().padStart(16, '0')
-            val blockWidth = (size.width - nameWidth - 8.dp.toPx()) / 16f
+            val blockWidth = (size.width - nameWidth - 12.dp.toPx()) / 16f
 
             for (i in 0 until 16) {
-                val blockX = nameWidth + 8.dp.toPx() + i * blockWidth
+                val blockX = nameWidth + 10.dp.toPx() + i * blockWidth
                 val nibble = hexDigits[i].digitToIntOrNull(16) ?: 0
                 val intensity = nibble / 15f
 
+                val blockBgColor = when {
+                    reg.isHighlighted -> TerminalAmber.copy(alpha = 0.1f + intensity * 0.5f)
+                    reg.value != 0L -> TerminalGreen.copy(alpha = 0.08f + intensity * 0.75f)
+                    else -> Color(0xFF151515)
+                }
+                val blockBorderColor = when {
+                    reg.isHighlighted -> TerminalAmber.copy(alpha = 0.15f)
+                    reg.value != 0L -> TerminalGreen.copy(alpha = 0.12f)
+                    else -> Color(0xFF222222)
+                }
+
                 drawRect(
-                    color = TerminalGreen.copy(alpha = 0.1f + intensity * 0.9f),
-                    topLeft = Offset(blockX, y),
-                    size = Size(blockWidth - gap, rowHeight - gap)
+                    color = blockBgColor,
+                    topLeft = Offset(blockX, y + 1.dp.toPx()),
+                    size = Size(blockWidth - gap, rowHeight - gap - 2.dp.toPx())
+                )
+                drawRect(
+                    color = blockBorderColor,
+                    topLeft = Offset(blockX, y + 1.dp.toPx()),
+                    size = Size(blockWidth - gap, rowHeight - gap - 2.dp.toPx()),
+                    style = Stroke(width = 0.5f)
                 )
 
                 // Hex 数字
+                val hexTextColor = when {
+                    reg.isHighlighted -> if (intensity > 0.5f) TerminalAmber.copy(alpha = 0.9f) else TerminalAmber.copy(alpha = 0.5f)
+                    reg.value != 0L -> if (intensity > 0.5f) Color.Black else TerminalGreen.copy(alpha = 0.7f)
+                    else -> TerminalGray.copy(alpha = 0.25f)
+                }
                 val hexLayout = textMeasurer.measure(
                     hexDigits[i].toString(),
                     TextStyle(
-                        color = if (intensity > 0.5f) Color.Black else TerminalGreen,
-                        fontSize = 14.sp,
+                        color = hexTextColor,
+                        fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace
                     )
                 )
@@ -111,53 +155,76 @@ fun RegisterBank(
                     hexLayout,
                     topLeft = Offset(
                         blockX + (blockWidth - gap - hexLayout.size.width) / 2,
-                        y + (rowHeight - gap - hexLayout.size.height) / 2
+                        y + 1.dp.toPx() + (rowHeight - gap - 2.dp.toPx() - hexLayout.size.height) / 2
                     )
                 )
             }
         }
 
-        // 数据路径绿色流光箭头
+        // 数据路径绿色流光箭头（增强版：多粒子拖尾 + 加粗 + 渐变）
         if (dataPath != null) {
             val fromIndex = registers.indexOfFirst { it.name == dataPath.from }
             val toIndex = registers.indexOfFirst { it.name == dataPath.to }
             if (fromIndex >= 0 && toIndex >= 0) {
                 val fromY = fromIndex * rowHeight + gap + (rowHeight - gap) / 2
                 val toY = toIndex * rowHeight + gap + (rowHeight - gap) / 2
-                val pathX = nameWidth + 24.dp.toPx()
+                val pathX = nameWidth + 20.dp.toPx()
                 val start = Offset(pathX, fromY)
                 val end = Offset(pathX, toY)
-                val control = Offset(pathX + 36.dp.toPx(), (fromY + toY) / 2)
+                val control = Offset(pathX + 32.dp.toPx(), (fromY + toY) / 2)
 
-                // 基线
+                // 基线（加粗渐变）
                 val basePath = Path().apply {
                     moveTo(start.x, start.y)
                     quadraticTo(control.x, control.y, end.x, end.y)
                 }
                 drawPath(
                     path = basePath,
-                    color = TerminalGreen.copy(alpha = 0.2f),
-                    style = Stroke(width = 2.dp.toPx())
+                    color = TerminalGreen.copy(alpha = 0.15f),
+                    style = Stroke(width = 3.dp.toPx())
+                )
+                drawPath(
+                    path = basePath,
+                    color = TerminalGreen.copy(alpha = 0.08f),
+                    style = Stroke(width = 6.dp.toPx())
                 )
 
-                // 流光小圆点
-                val steps = 6
+                // 多粒子拖尾数据流（8 个粒子形成流光带）
+                val steps = 8
                 for (i in 0..steps) {
-                    val t = dataPath.progress - (i / steps.toFloat()) * 0.12f
+                    val t = dataPath.progress - (i / steps.toFloat()) * 0.14f
                     if (t < 0f || t > 1f) continue
                     val pos = quadBezier(t, start, control, end)
-                    val alpha = (1f - i / steps.toFloat()).coerceIn(0.15f, 1f)
-                    val radius = (3.5f - i * 0.3f).dp.toPx()
+                    val alpha = ((1f - i / steps.toFloat()) * 0.9f).coerceIn(0.1f, 1f) * dataPath.progress.coerceAtLeast(0.3f)
+                    val radius = (4.5f - i * 0.35f).coerceAtLeast(1.5f).dp.toPx()
+                    val color = when {
+                        i == 0 -> Color.White
+                        i <= 2 -> TerminalGreen.copy(alpha = 1f)
+                        else -> TerminalGreen
+                    }
                     drawCircle(
-                        color = TerminalGreen.copy(alpha = alpha),
+                        color = color.copy(alpha = alpha),
                         radius = radius,
                         center = pos
                     )
                 }
 
                 // 箭头头部
-                if (dataPath.progress > 0.85f) {
-                    drawArrowHead(end, control, end, TerminalGreen)
+                if (dataPath.progress > 0.8f) {
+                    drawArrowHead(end, control, end, TerminalGreen.copy(alpha = dataPath.progress))
+                }
+
+                // 路径经过的寄存器微高亮
+                val midIndex = (fromIndex + toIndex) / 2
+                listOf(fromIndex, midIndex, toIndex).distinct().forEach { idx ->
+                    if (idx in registers.indices) {
+                        val ry = idx * rowHeight + gap
+                        drawRect(
+                            color = TerminalGreen.copy(alpha = 0.06f * dataPath.progress),
+                            topLeft = Offset(0f, ry),
+                            size = Size(size.width, rowHeight - gap)
+                        )
+                    }
                 }
             }
         }

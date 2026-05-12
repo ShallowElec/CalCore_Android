@@ -218,6 +218,20 @@ sealed class AnimationAction {
         val progress: Float = 0f    // 0.0~1.0
     ) : AnimationAction()
 
+    // ==================== 阶段控制 ====================
+
+    /** 进入新阶段 */
+    data class EnterPhase(
+        val phase: PipelinePhase,
+        val phaseDurationMs: Long = 0L
+    ) : AnimationAction()
+
+    /** 退出当前阶段 */
+    data class ExitPhase(
+        val phase: PipelinePhase,
+        val summary: String = ""
+    ) : AnimationAction()
+
     // ==================== 元数据 ====================
 
     /** 更新事件描述 */

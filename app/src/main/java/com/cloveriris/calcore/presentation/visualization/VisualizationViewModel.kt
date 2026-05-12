@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.cloveriris.calcore.domain.model.AnimationAction
 import com.cloveriris.calcore.domain.model.AnimationEvent
 import com.cloveriris.calcore.domain.model.Architecture
+import com.cloveriris.calcore.domain.model.PipelinePhase
 import com.cloveriris.calcore.domain.model.VisualizationLevel
 import com.cloveriris.calcore.engine.visualization.VisualizationEngine
 import com.cloveriris.calcore.ui.visualization.MemoryCellVisual
@@ -25,6 +26,9 @@ import javax.inject.Inject
  *
  * 接收 AnimationEvent，通过 VisualizationEngine 生成 AnimationScript，
  * 由 ScriptPlayer 驱动按时间回放，最终输出 VisualizationUiState 供 Canvas 消费。
+ *
+ * 核心特性：阶段式流水线播放。按下 = 后，L1-L8 被映射为 6 个阶段，
+ * 视觉焦点逐阶段推进，当前阶段展开，已完成阶段收缩为摘要。
  */
 @HiltViewModel
 class VisualizationViewModel @Inject constructor() : ViewModel() {
@@ -38,12 +42,15 @@ class VisualizationViewModel @Inject constructor() : ViewModel() {
     /** 基准 step 间隔（毫秒），默认 200ms */
     private val baseStepIntervalMs = 200L
 
+    /** 阶段之间的停顿感（毫秒） */
+    private val phaseGapMs = 120L
+
     fun onEvent(event: AnimationEvent) {
         val arch = _uiState.value.architecture
         val script = VisualizationEngine.generateScript(event, arch)
         currentScript = script
         _uiState.update {
-            // 保留用户设置和上次的内容描述，避免 placeholder → content 闪烁
+            // 保留用户设置，重置阶段状态，避免 placeholder → content 闪烁
             VisualizationUiState(
                 architecture = it.architecture,
                 playbackSpeed = it.playbackSpeed,
@@ -108,9 +115,22 @@ class VisualizationViewModel @Inject constructor() : ViewModel() {
             val speed = _uiState.value.playbackSpeed
             val stepCount = (script.totalDurationMs / baseStepIntervalMs).toInt().coerceAtLeast(8)
             val stepDelay = (baseStepIntervalMs / speed).toLong().coerceAtLeast(50L)
+            val phaseGap = (phaseGapMs / speed).toLong().coerceAtLeast(30L)
+
+            // 预计算阶段区间
+            val phaseRanges = computePhaseRanges(script)
+
             repeat(stepCount) { i ->
                 delay(stepDelay)
                 val progress = (i + 1) / stepCount.toFloat()
+
+                // 检测是否跨越阶段边界，如果是则增加额外停顿
+                val currentPhase = detectPhaseAtProgress(progress, phaseRanges)
+                val prevPhase = detectPhaseAtProgress(((i).coerceAtLeast(0)) / stepCount.toFloat(), phaseRanges)
+                if (currentPhase != null && currentPhase != prevPhase && prevPhase != null) {
+                    delay(phaseGap)
+                }
+
                 applyScriptAtProgress(progress, script)
             }
             _uiState.update {
@@ -130,14 +150,73 @@ class VisualizationViewModel @Inject constructor() : ViewModel() {
             val speed = _uiState.value.playbackSpeed
             val stepCount = (script.totalDurationMs / baseStepIntervalMs).toInt().coerceAtLeast(8)
             val stepDelay = (baseStepIntervalMs / speed).toLong().coerceAtLeast(50L)
+            val phaseGap = (phaseGapMs / speed).toLong().coerceAtLeast(30L)
+            val phaseRanges = computePhaseRanges(script)
             val remainingSteps = ((1f - currentProgress) * stepCount).toInt().coerceAtLeast(1)
+
             repeat(remainingSteps) { i ->
                 delay(stepDelay)
                 val progress = currentProgress + (i + 1) / stepCount.toFloat() * (1f - currentProgress)
+
+                val currentPhase = detectPhaseAtProgress(progress, phaseRanges)
+                val prevPhase = detectPhaseAtProgress(
+                    (currentProgress + i / stepCount.toFloat() * (1f - currentProgress)).coerceAtLeast(0f),
+                    phaseRanges
+                )
+                if (currentPhase != null && currentPhase != prevPhase && prevPhase != null) {
+                    delay(phaseGap)
+                }
+
                 applyScriptAtProgress(progress, script)
             }
             _uiState.update { it.copy(isPlaying = false, evaluationProgress = 1f) }
         }
+    }
+
+    /**
+     * 从脚本中提取每个阶段的 [startProgress, endProgress) 区间。
+     */
+    private fun computePhaseRanges(
+        script: com.cloveriris.calcore.domain.model.AnimationScript
+    ): Map<PipelinePhase, Pair<Float, Float>> {
+        val total = script.totalDurationMs.toFloat().coerceAtLeast(1f)
+        val ranges = mutableMapOf<PipelinePhase, Pair<Float, Float>>()
+        var currentPhase: PipelinePhase? = null
+        var phaseStart = 0f
+
+        val sortedEvents = script.events.sortedBy { it.timeMs }
+
+        for (event in sortedEvents) {
+            val progress = event.timeMs / total
+            when (val action = event.action) {
+                is AnimationAction.EnterPhase -> {
+                    if (currentPhase != null) {
+                        ranges[currentPhase] = phaseStart to progress
+                    }
+                    currentPhase = action.phase
+                    phaseStart = progress
+                }
+                is AnimationAction.ExitPhase -> {
+                    if (currentPhase != null) {
+                        ranges[currentPhase] = phaseStart to progress
+                        currentPhase = null
+                    }
+                }
+                else -> { /* ignore */ }
+            }
+        }
+        // 最后一个阶段如果未 exit，则延伸到结尾
+        if (currentPhase != null) {
+            ranges[currentPhase] = phaseStart to 1.0f
+        }
+        return ranges
+    }
+
+    private fun detectPhaseAtProgress(
+        progress: Float,
+        ranges: Map<PipelinePhase, Pair<Float, Float>>
+    ): PipelinePhase? {
+        return ranges.entries.find { progress >= it.value.first && progress < it.value.second }?.key
     }
 
     private fun applyScriptAtProgress(
@@ -146,11 +225,28 @@ class VisualizationViewModel @Inject constructor() : ViewModel() {
     ) {
         val timeMs = (progress * script.totalDurationMs).toLong()
         val actions = script.events.filter { it.timeMs <= timeMs }.map { it.action }
+
+        // 计算阶段相关状态
+        val ranges = computePhaseRanges(script)
+        val activePhase = detectPhaseAtProgress(progress, ranges)
+        val phaseProgress = activePhase?.let { phase ->
+            val range = ranges[phase] ?: return@let 0f
+            val duration = range.second - range.first
+            if (duration > 0.001f) ((progress - range.first) / duration).coerceIn(0f, 1f) else 1f
+        } ?: 0f
+        val completedPhases = ranges.filter { progress >= it.value.second }.keys
+        val phaseDurations = ranges.mapValues { ((it.value.second - it.value.first) * script.totalDurationMs).toLong() }
+
         var newState = _uiState.value.copy(
             evaluationProgress = progress,
             currentTimeMs = timeMs,
-            totalDurationMs = script.totalDurationMs
+            totalDurationMs = script.totalDurationMs,
+            activePhase = activePhase,
+            phaseProgress = phaseProgress,
+            completedPhases = completedPhases,
+            phaseDurations = phaseDurations
         )
+
         for (action in actions) {
             newState = reduceAction(newState, action)
         }
@@ -161,6 +257,27 @@ class VisualizationViewModel @Inject constructor() : ViewModel() {
 
     private fun reduceAction(state: VisualizationUiState, action: AnimationAction): VisualizationUiState {
         return when (action) {
+            is AnimationAction.EnterPhase ->
+                state.copy(
+                    activePhase = action.phase,
+                    phaseProgress = 0f,
+                    completedPhases = state.completedPhases - action.phase
+                )
+
+            is AnimationAction.ExitPhase -> {
+                val newCompleted = state.completedPhases + action.phase
+                val newSnapshots = if (action.summary.isNotBlank()) {
+                    state.phaseSnapshots + (action.phase to action.summary)
+                } else {
+                    state.phaseSnapshots - action.phase
+                }
+                state.copy(
+                    activePhase = if (state.activePhase == action.phase) null else state.activePhase,
+                    completedPhases = newCompleted,
+                    phaseSnapshots = newSnapshots
+                )
+            }
+
             is AnimationAction.UpdateBitGrid ->
                 state.copy(bitGridBits = action.bits, bitGridLabel = action.label)
 
@@ -177,6 +294,16 @@ class VisualizationViewModel @Inject constructor() : ViewModel() {
                 } else if (action.index == 0 && regs.isEmpty()) {
                     regs.addAll(state.architecture.registerNames.map { RegisterVisual(it, 0L) })
                     regs[0] = regs[0].copy(value = action.value, isHighlighted = action.isHighlighted)
+                } else if (action.index < state.architecture.registerNames.size) {
+                    // 初始化缺失的寄存器到目标索引
+                    while (regs.size <= action.index) {
+                        val name = state.architecture.registerNames.getOrNull(regs.size) ?: "R${regs.size}"
+                        regs.add(RegisterVisual(name, 0L))
+                    }
+                    regs[action.index] = regs[action.index].copy(
+                        value = action.value,
+                        isHighlighted = action.isHighlighted
+                    )
                 }
                 state.copy(registers = regs)
             }
