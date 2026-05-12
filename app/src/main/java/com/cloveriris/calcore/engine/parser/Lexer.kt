@@ -21,7 +21,7 @@ class Lexer(private val input: String) {
         "asin", "acos", "atan",
         "sinh", "cosh", "tanh",
         "log", "ln",
-        "sqrt", "abs",
+        "sqrt", "cbrt", "abs",
         "floor", "ceil", "round"
     )
 
@@ -68,6 +68,10 @@ class Lexer(private val input: String) {
                 advance()
                 Token.Percent()
             }
+            currentChar == '!' -> {
+                advance()
+                Token.Factorial()
+            }
             currentChar == '(' -> {
                 advance()
                 Token.LParen()
@@ -103,7 +107,7 @@ class Lexer(private val input: String) {
 
     private fun readIdentifier(): Token {
         val start = position
-        while (currentChar != null && currentChar!!.isLetter()) {
+        while (currentChar != null && (currentChar!!.isLetter() || currentChar!!.isDigit() || currentChar == '_')) {
             advance()
         }
 

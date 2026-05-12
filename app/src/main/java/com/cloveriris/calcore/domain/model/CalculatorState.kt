@@ -42,7 +42,12 @@ sealed interface CalculatorInput {
     data object Percent : CalculatorInput
     data object Reciprocal : CalculatorInput
     data object Square : CalculatorInput
+    data object Cube : CalculatorInput
     data object SquareRoot : CalculatorInput
+    data object CubeRoot : CalculatorInput
+    data object ArcSin : CalculatorInput
+    data object ArcCos : CalculatorInput
+    data object ArcTan : CalculatorInput
     data object Negate : CalculatorInput
 
     // Memory operations

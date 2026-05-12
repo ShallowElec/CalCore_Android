@@ -107,9 +107,17 @@ fun ScientificKeypad(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf("x³", "³√x", "sin⁻¹", "cos⁻¹", "tan⁻¹").forEach { label ->
+                val input = when (label) {
+                    "x³" -> CalculatorInput.Cube
+                    "³√x" -> CalculatorInput.CubeRoot
+                    "sin⁻¹" -> CalculatorInput.ArcSin
+                    "cos⁻¹" -> CalculatorInput.ArcCos
+                    "tan⁻¹" -> CalculatorInput.ArcTan
+                    else -> CalculatorInput.Digit(label)
+                }
                 CalcoreButton(
                     label = label,
-                    onClick = { /* TODO */ },
+                    onClick = { onInput(input) },
                     modifier = Modifier.weight(1f),
                     type = ButtonType.FUNCTION
                 )

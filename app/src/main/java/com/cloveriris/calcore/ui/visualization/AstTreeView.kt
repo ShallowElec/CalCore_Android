@@ -217,4 +217,5 @@ private fun operatorSymbol(op: BinaryOperator): String = when (op) {
 private fun operatorSymbol(op: UnaryOperator): String = when (op) {
     UnaryOperator.NEGATE -> "-"
     UnaryOperator.PERCENT -> "%"
+    UnaryOperator.FACTORIAL -> "!"
 }

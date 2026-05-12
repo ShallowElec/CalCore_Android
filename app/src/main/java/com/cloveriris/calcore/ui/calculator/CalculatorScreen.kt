@@ -71,6 +71,7 @@ fun CalculatorScreen(
     onNavigateToCalculus: () -> Unit = {},
     onNavigateToDifferentialEquations: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToAbout: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: CalculatorViewModel = hiltViewModel(),
     visualizationViewModel: VisualizationViewModel = hiltViewModel()
@@ -116,6 +117,10 @@ fun CalculatorScreen(
                 onNavigateToSettings = {
                     scope.launch { drawerState.close() }
                     onNavigateToSettings()
+                },
+                onNavigateToAbout = {
+                    scope.launch { drawerState.close() }
+                    onNavigateToAbout()
                 }
             )
         },

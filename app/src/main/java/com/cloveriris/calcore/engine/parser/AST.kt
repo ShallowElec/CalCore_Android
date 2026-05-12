@@ -54,6 +54,7 @@ enum class BinaryOperator {
 }
 
 enum class UnaryOperator {
-    NEGATE,   // -
-    PERCENT   // %
+    NEGATE,    // -
+    PERCENT,   // %
+    FACTORIAL  // !
 }

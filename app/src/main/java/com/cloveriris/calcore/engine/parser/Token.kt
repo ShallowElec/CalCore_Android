@@ -16,6 +16,7 @@ sealed class Token {
     data class Divide(override val literal: String = "÷") : Token()
     data class Power(override val literal: String = "^") : Token()
     data class Percent(override val literal: String = "%") : Token()
+    data class Factorial(override val literal: String = "!") : Token()
 
     // 括号
     data class LParen(override val literal: String = "(") : Token()

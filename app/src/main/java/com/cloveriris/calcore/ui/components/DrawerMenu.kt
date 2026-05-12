@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -188,7 +189,7 @@ fun DrawerMenu(
                 )
                 converters.forEach { (label, iconVector) ->
                     DrawerItem(
-                        label = label,
+                        label = "$label (即将推出)",
                         icon = {
                             Icon(
                                 imageVector = iconVector,
@@ -197,7 +198,8 @@ fun DrawerMenu(
                             )
                         },
                         selected = false,
-                        onClick = { /* TODO: converter navigation */ }
+                        enabled = false,
+                        onClick = { }
                     )
                 }
 
@@ -242,16 +244,22 @@ private fun DrawerItem(
     label: String,
     icon: @Composable () -> Unit,
     selected: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     NavigationDrawerItem(
         label = { Text(label) },
         icon = icon,
         selected = selected,
-        onClick = onClick,
-        modifier = Modifier.padding(vertical = 2.dp),
+        onClick = if (enabled) onClick else ({ }),
+        modifier = if (enabled) {
+            Modifier.padding(vertical = 2.dp)
+        } else {
+            Modifier.padding(vertical = 2.dp).alpha(0.45f)
+        },
         colors = NavigationDrawerItemDefaults.colors(
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+            unselectedContainerColor = MaterialTheme.colorScheme.surface
         )
     )
 }

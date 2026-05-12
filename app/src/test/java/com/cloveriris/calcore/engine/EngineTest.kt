@@ -17,6 +17,14 @@ class EngineTest {
         return Evaluator.evaluate(ast)
     }
 
+    private fun evaluate(expression: String, variables: Map<String, Double>): Double {
+        val lexer = Lexer(expression)
+        val tokens = lexer.tokenize()
+        val parser = Parser(tokens)
+        val ast = parser.parse() ?: throw IllegalStateException("Parse failed")
+        return Evaluator.evaluate(ast, variables)
+    }
+
     @Test
     fun `addition`() {
         assertEquals(5.0, evaluate("2 + 3"), 0.0001)
@@ -114,5 +122,30 @@ class EngineTest {
     @Test
     fun `function with constant`() {
         assertEquals(0.0, evaluate("sin π"), 0.0001)
+    }
+
+    @Test
+    fun `factorial`() {
+        assertEquals(1.0, evaluate("0!"), 0.0001)
+        assertEquals(1.0, evaluate("1!"), 0.0001)
+        assertEquals(120.0, evaluate("5!"), 0.0001)
+        assertEquals(144.0, evaluate("3! * 4!"), 0.0001)
+    }
+
+    @Test
+    fun `multi-letter identifier`() {
+        // multi-letter variable in function call (implicit multiplication)
+        assertEquals(1.0, evaluate("sin(pi / 2)"), 0.0001)
+    }
+
+    @Test
+    fun `identifier with digit`() {
+        val vars = mapOf("x1" to 1.0, "x2" to 2.0)
+        assertEquals(3.0, evaluate("x1 + x2", vars), 0.0001)
+    }
+
+    @Test
+    fun `nested factorial`() {
+        assertEquals(720.0, evaluate("(3!)!"), 0.0001)
     }
 }

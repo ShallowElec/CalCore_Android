@@ -3,6 +3,10 @@ package com.cloveriris.calcore.ui.calculus
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitDragOrCancellation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
@@ -112,9 +116,12 @@ private fun PortraitLayout(
         CalculusCanvas(
             frame = uiState.frames.getOrNull(uiState.currentFrameIndex),
             viewport = uiState.viewport,
+            mode = uiState.mode,
+            point = uiState.point,
             onPan = { dx, dy -> viewModel.panViewport(dx, dy) },
             onZoom = { factor, ax, ay -> viewModel.zoomViewport(factor, ax, ay) },
             onReset = viewModel::resetView,
+            onPointDrag = viewModel::setPoint,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
@@ -173,9 +180,12 @@ private fun LandscapeLayout(
         CalculusCanvas(
             frame = uiState.frames.getOrNull(uiState.currentFrameIndex),
             viewport = uiState.viewport,
+            mode = uiState.mode,
+            point = uiState.point,
             onPan = { dx, dy -> viewModel.panViewport(dx, dy) },
             onZoom = { factor, ax, ay -> viewModel.zoomViewport(factor, ax, ay) },
             onReset = viewModel::resetView,
+            onPointDrag = viewModel::setPoint,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
@@ -305,9 +315,12 @@ private fun ParameterInputBar(
 private fun CalculusCanvas(
     frame: GeometryFrame?,
     viewport: com.cloveriris.calcore.presentation.calculus.CalculusViewport,
+    mode: CalculusMode,
+    point: Double,
     onPan: (Double, Double) -> Unit,
     onZoom: (Double, Double, Double) -> Unit,
     onReset: () -> Unit,
+    onPointDrag: (Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
@@ -315,6 +328,25 @@ private fun CalculusCanvas(
     Canvas(
         modifier = modifier
             .clipToBounds()
+            // 点拖拽手势（导数/极限模式下）
+            .pointerInput(mode, point, viewport) {
+                if (mode != CalculusMode.DERIVATIVE && mode != CalculusMode.LIMIT) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    val rangeX = viewport.maxX - viewport.minX
+                    val worldXAtTouch = viewport.minX + (down.position.x / size.width) * rangeX
+                    val threshold = rangeX * 0.06
+
+                    if (kotlin.math.abs(worldXAtTouch - point) < threshold) {
+                        var change = awaitTouchSlopOrCancellation(down.id) { c, _ -> c.consume() }
+                        while (change != null && change.pressed) {
+                            val wx = viewport.minX + (change.position.x / size.width) * rangeX
+                            onPointDrag(wx)
+                            change = awaitDragOrCancellation(change.id)
+                        }
+                    }
+                }
+            }
             .pointerInput(Unit) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
                     val w = size.width.toFloat()
@@ -322,12 +354,10 @@ private fun CalculusCanvas(
                     val rangeX = viewport.maxX - viewport.minX
                     val rangeY = viewport.maxY - viewport.minY
 
-                    // 平移：屏幕像素 → 世界坐标
                     val dxWorld = pan.x / w * rangeX
                     val dyWorld = -pan.y / h * rangeY
                     onPan(dxWorld.toDouble(), dyWorld.toDouble())
 
-                    // 缩放：以 centroid 为锚点
                     val cx = viewport.minX + (centroid.x / w) * rangeX
                     val cy = viewport.minY + ((h - centroid.y) / h) * rangeY
                     onZoom(zoom.toDouble(), cx, cy)

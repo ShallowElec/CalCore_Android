@@ -2,6 +2,7 @@ package com.cloveriris.calcore.presentation.visualization
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cloveriris.calcore.data.local.SettingsDataStore
 import com.cloveriris.calcore.domain.model.AnimationAction
 import com.cloveriris.calcore.domain.model.AnimationEvent
 import com.cloveriris.calcore.domain.model.Architecture
@@ -31,13 +32,28 @@ import javax.inject.Inject
  * 视觉焦点逐阶段推进，当前阶段展开，已完成阶段收缩为摘要。
  */
 @HiltViewModel
-class VisualizationViewModel @Inject constructor() : ViewModel() {
+class VisualizationViewModel @Inject constructor(
+    private val settingsDataStore: SettingsDataStore
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VisualizationUiState())
     val uiState: StateFlow<VisualizationUiState> = _uiState.asStateFlow()
 
     private var currentScript: com.cloveriris.calcore.domain.model.AnimationScript? = null
     private var playbackJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            settingsDataStore.architecture.collect { arch ->
+                _uiState.update { it.copy(architecture = arch) }
+            }
+        }
+        viewModelScope.launch {
+            settingsDataStore.playbackSpeed.collect { speed ->
+                _uiState.update { it.copy(playbackSpeed = speed) }
+            }
+        }
+    }
 
     /** 基准 step 间隔（毫秒），默认 200ms */
     private val baseStepIntervalMs = 200L
@@ -85,10 +101,17 @@ class VisualizationViewModel @Inject constructor() : ViewModel() {
 
     fun setArchitecture(arch: Architecture) {
         _uiState.update { it.copy(architecture = arch) }
+        viewModelScope.launch {
+            settingsDataStore.setArchitecture(arch)
+        }
     }
 
     fun setPlaybackSpeed(speed: Float) {
-        _uiState.update { it.copy(playbackSpeed = speed.coerceIn(0.2f, 2.0f)) }
+        val coerced = speed.coerceIn(0.2f, 2.0f)
+        _uiState.update { it.copy(playbackSpeed = coerced) }
+        viewModelScope.launch {
+            settingsDataStore.setPlaybackSpeed(coerced)
+        }
     }
 
     fun setPanelExpanded(expanded: Boolean) {

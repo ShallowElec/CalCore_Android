@@ -16,6 +16,7 @@ import com.cloveriris.calcore.ui.calculus.CalculusScreen
 import com.cloveriris.calcore.ui.diffeq.DifferentialEquationsScreen
 import com.cloveriris.calcore.ui.graphing.GraphingScreen
 import com.cloveriris.calcore.ui.linearalgebra.LinearAlgebraScreen
+import com.cloveriris.calcore.ui.about.AboutScreen
 import com.cloveriris.calcore.ui.settings.SettingsScreen
 import com.cloveriris.calcore.ui.theme.AppTheme
 
@@ -26,6 +27,7 @@ object CalcoreDestinations {
     const val CALCULUS = "calculus"
     const val DIFFERENTIAL_EQUATIONS = "differential_equations"
     const val SETTINGS = "settings"
+    const val ABOUT = "about"
 }
 
 @Composable
@@ -58,6 +60,9 @@ fun CalcoreNavHost(
                 },
                 onNavigateToSettings = {
                     navController.navigate(CalcoreDestinations.SETTINGS)
+                },
+                onNavigateToAbout = {
+                    navController.navigate(CalcoreDestinations.ABOUT)
                 }
             )
         }
@@ -78,6 +83,11 @@ fun CalcoreNavHost(
         }
         composable(CalcoreDestinations.DIFFERENTIAL_EQUATIONS) {
             DifferentialEquationsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(CalcoreDestinations.ABOUT) {
+            AboutScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

@@ -70,10 +70,24 @@ class Parser(private val tokens: List<Token>) {
     }
 
     /**
-     * power = unary
+     * power = postfix
      */
     private fun parsePower(): Expression {
-        return parseUnary()
+        return parsePostfix()
+    }
+
+    /**
+     * postfix = unary { "!" }
+     *
+     * 阶乘是后缀一元运算符，优先级高于幂运算。
+     */
+    private fun parsePostfix(): Expression {
+        var expr = parseUnary()
+        while (currentToken is Token.Factorial) {
+            advance()
+            expr = Expression.Unary(UnaryOperator.FACTORIAL, expr)
+        }
+        return expr
     }
 
     /**

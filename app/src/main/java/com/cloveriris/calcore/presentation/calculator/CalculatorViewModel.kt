@@ -23,6 +23,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.math.acos
+import kotlin.math.asin
+import kotlin.math.atan
+import kotlin.math.cbrt
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -53,7 +57,12 @@ class CalculatorViewModel @Inject constructor(
             CalculatorInput.Percent -> onPercent()
             CalculatorInput.Reciprocal -> onReciprocal()
             CalculatorInput.Square -> onSquare()
+            CalculatorInput.Cube -> onCube()
             CalculatorInput.SquareRoot -> onSquareRoot()
+            CalculatorInput.CubeRoot -> onCubeRoot()
+            CalculatorInput.ArcSin -> onArcSin()
+            CalculatorInput.ArcCos -> onArcCos()
+            CalculatorInput.ArcTan -> onArcTan()
             CalculatorInput.Negate -> onNegate()
             CalculatorInput.MemoryClear -> onMemoryClear()
             CalculatorInput.MemoryRecall -> onMemoryRecall()
@@ -462,6 +471,91 @@ class CalculatorViewModel @Inject constructor(
             current.copy(
                 state = CalculatorState.Evaluated(
                     displayExpression = "√($expr)",
+                    displayResult = resultStr
+                )
+            )
+        }
+    }
+
+    private fun onCube() {
+        _uiState.update { current ->
+            val expr = getCurrentExpression(current.state)
+            val result = evaluateUseCase.evaluate("($expr) ^ 3")
+            val resultStr = result.fold(
+                onSuccess = ::formatResult,
+                onFailure = { "Error" }
+            )
+            current.copy(
+                state = CalculatorState.Evaluated(
+                    displayExpression = "cube($expr)",
+                    displayResult = resultStr
+                )
+            )
+        }
+    }
+
+    private fun onCubeRoot() {
+        _uiState.update { current ->
+            val expr = getCurrentExpression(current.state)
+            val result = evaluateUseCase.evaluate("cbrt($expr)")
+            val resultStr = result.fold(
+                onSuccess = ::formatResult,
+                onFailure = { "Error" }
+            )
+            current.copy(
+                state = CalculatorState.Evaluated(
+                    displayExpression = "∛($expr)",
+                    displayResult = resultStr
+                )
+            )
+        }
+    }
+
+    private fun onArcSin() {
+        _uiState.update { current ->
+            val expr = getCurrentExpression(current.state)
+            val result = evaluateUseCase.evaluate("asin($expr)")
+            val resultStr = result.fold(
+                onSuccess = ::formatResult,
+                onFailure = { "Error" }
+            )
+            current.copy(
+                state = CalculatorState.Evaluated(
+                    displayExpression = "asin($expr)",
+                    displayResult = resultStr
+                )
+            )
+        }
+    }
+
+    private fun onArcCos() {
+        _uiState.update { current ->
+            val expr = getCurrentExpression(current.state)
+            val result = evaluateUseCase.evaluate("acos($expr)")
+            val resultStr = result.fold(
+                onSuccess = ::formatResult,
+                onFailure = { "Error" }
+            )
+            current.copy(
+                state = CalculatorState.Evaluated(
+                    displayExpression = "acos($expr)",
+                    displayResult = resultStr
+                )
+            )
+        }
+    }
+
+    private fun onArcTan() {
+        _uiState.update { current ->
+            val expr = getCurrentExpression(current.state)
+            val result = evaluateUseCase.evaluate("atan($expr)")
+            val resultStr = result.fold(
+                onSuccess = ::formatResult,
+                onFailure = { "Error" }
+            )
+            current.copy(
+                state = CalculatorState.Evaluated(
+                    displayExpression = "atan($expr)",
                     displayResult = resultStr
                 )
             )

@@ -41,7 +41,20 @@ object Evaluator {
         return when (expr.operator) {
             UnaryOperator.NEGATE -> -operand
             UnaryOperator.PERCENT -> operand / 100.0
+            UnaryOperator.FACTORIAL -> factorial(operand)
         }
+    }
+
+    private fun factorial(n: Double): Double {
+        if (n < 0) return Double.NaN
+        if (n > 170) return Double.POSITIVE_INFINITY // 170! 是 Double 能表示的最大值
+        val intN = n.toInt()
+        if (intN.toDouble() != n) return Double.NaN // 非整数阶乘暂不支持
+        var result = 1.0
+        for (i in 2..intN) {
+            result *= i
+        }
+        return result
     }
 
     private fun evaluateFunction(expr: Expression.FunctionCall, variables: Map<String, Double>): Double {
@@ -59,6 +72,7 @@ object Evaluator {
             "log" -> log10(arg)
             "ln" -> ln(arg)
             "sqrt" -> sqrt(arg)
+            "cbrt" -> cbrt(arg)
             "abs" -> abs(arg)
             "floor" -> floor(arg)
             "ceil" -> ceil(arg)
